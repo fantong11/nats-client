@@ -1,0 +1,33 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+    show-sql: true
+  h2:
+    console:
+      enabled: true
+
+nats:
+  url: nats://mock-nats:4222  # Will be mocked in tests
+  connection:
+    timeout: 5000
+    reconnect:
+      wait: 1000
+      max-attempts: 3
+  request:
+    timeout: 10000
+
+logging:
+  level:
+    com.example.natsclient: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.springframework.web: DEBUG

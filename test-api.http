@@ -1,0 +1,56 @@
+### NATS Client API Testing
+
+### 1. Health Check
+GET http://localhost:8080/api/nats/health
+
+### 2. Test Echo (Simple Request-Response)
+POST http://localhost:8080/api/nats/test/echo
+Content-Type: application/json
+
+{
+  "message": "Hello NATS!",
+  "metadata": "test from REST API"
+}
+
+### 3. Test Timeout
+POST http://localhost:8080/api/nats/test/timeout
+Content-Type: application/json
+
+### 4. Test Error Handling
+POST http://localhost:8080/api/nats/test/error
+Content-Type: application/json
+
+### 5. Generic NATS Request
+POST http://localhost:8080/api/nats/request
+Content-Type: application/json
+
+{
+  "subject": "demo.user.create",
+  "payload": {
+    "username": "john_doe",
+    "email": "john@example.com",
+    "action": "create_user"
+  }
+}
+
+### 6. Publish Message (Fire and Forget)
+POST http://localhost:8080/api/nats/publish
+Content-Type: application/json
+
+{
+  "subject": "api.notification.send",
+  "payload": {
+    "userId": "12345",
+    "message": "Welcome to our service!",
+    "type": "welcome"
+  }
+}
+
+### 7. Get Request Status
+GET http://localhost:8080/api/nats/status/{{requestId}}
+
+### 8. Get Requests by Status
+GET http://localhost:8080/api/nats/requests/SUCCESS
+
+### 9. Get NATS Statistics
+GET http://localhost:8080/api/nats/statistics

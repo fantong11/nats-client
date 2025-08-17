@@ -1,0 +1,62 @@
+# Compiled class files
+*.class
+target/
+
+# Log files
+*.log
+logs/
+
+# Maven
+.mvn/
+mvn.cmd
+mvnw
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Test reports
+surefire-reports/
+test-output/
+
+# Local configuration
+application-local.properties
+application-local.yml
+*.local.json
+
+# Apache Maven distribution
+apache-maven-*/
+
+# NATS temporary files
+nats-server.pid
+
+# Generated documentation
+/doc/
+
+# Package files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Vault
+.vault-token

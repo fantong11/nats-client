@@ -1,0 +1,79 @@
+spring:
+  datasource:
+    url: jdbc:oracle:thin:@localhost:1521:xe
+    username: ${DB_USERNAME:your_username}
+    password: ${DB_PASSWORD:your_password}
+    driver-class-name: oracle.jdbc.OracleDriver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.OracleDialect
+        format_sql: true
+    show-sql: true
+
+  application:
+    name: nats-client
+
+nats:
+  url: ${NATS_URL:nats://localhost:4222}
+  # Authentication options (choose one)
+  username: ${NATS_USERNAME:}
+  password: ${NATS_PASSWORD:}
+  token: ${NATS_TOKEN:}
+  credentials: ${NATS_CREDENTIALS_FILE:}
+  
+  connection:
+    timeout: 10000
+    reconnect:
+      wait: 2000
+      max-attempts: 10
+  request:
+    timeout: 30000
+    
+  # TLS configuration
+  tls:
+    enabled: ${NATS_TLS_ENABLED:false}
+    keystore: ${NATS_TLS_KEYSTORE:}
+    keystorePassword: ${NATS_TLS_KEYSTORE_PASSWORD:}
+    truststore: ${NATS_TLS_TRUSTSTORE:}
+    truststorePassword: ${NATS_TLS_TRUSTSTORE_PASSWORD:}
+
+logging:
+  level:
+    com.example.natsclient: DEBUG
+    org.hibernate.SQL: DEBUG
+
+---
+# Kubernetes Profile
+spring:
+  config:
+    activate:
+      on-profile: kubernetes
+  datasource:
+    url: jdbc:oracle:thin:@${DB_HOST:oracle-db}:${DB_PORT:1521}:${DB_SID:xe}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+# Vault Agent 和 K8s Secret 掛載路徑
+nats:
+  credentials:
+    vault-path: /vault/secrets
+    k8s-secret-path: /etc/secrets/nats
+
+---
+# Local Development Profile
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: jdbc:oracle:thin:@localhost:1521:xe
+    username: system
+    password: oracle123
+
+nats:
+  url: nats://localhost:14222
+  # 本地開發不需要認證
