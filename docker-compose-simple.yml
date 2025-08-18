@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  nats:
+    image: nats:2.10.7-alpine
+    container_name: nats-server
+    ports:
+      - "14222:4222"  # NATS client port
+      - "18222:8222"  # HTTP monitoring port
+    command:
+      - "--http_port"
+      - "8222"
+      - "--name"
+      - "nats-server"
+      - "--log"
+      - "/dev/stdout"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/varz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - nats-network
+
+  nats-client:
+    image: nats-client:latest
+    container_name: nats-client-app
+    ports:
+      - "8080:8080"
+    environment:
+      - NATS_URL=nats://nats:4222
+      - SPRING_PROFILES_ACTIVE=local
+      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@localhost:1521:xe
+      - SPRING_DATASOURCE_USERNAME=system
+      - SPRING_DATASOURCE_PASSWORD=oracle123
+      - SPRING_AUTOCONFIGURE_EXCLUDE=org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks:
+      - nats-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  nats-network:
+    driver: bridge

@@ -1,0 +1,17 @@
+target/
+.git/
+.gitignore
+*.md
+test-*.http
+test-*.bat
+*.bat
+run-tests.bat
+start-local.bat
+test-nats.bat
+k8s/
+TEST-*.md
+README*.md
+FLOW-DIAGRAM.md
+FUNCTIONALITY-REPORT.md
+TESTING-GUIDE.md
+apache-maven-3.9.6-bin.zip

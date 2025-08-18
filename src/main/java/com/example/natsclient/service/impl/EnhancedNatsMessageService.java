@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Primary;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
@@ -39,6 +40,7 @@ import java.util.concurrent.CompletionException;
  * - Performance monitoring
  */
 @Service
+@Primary
 public class EnhancedNatsMessageService implements NatsMessageService {
     
     private static final Logger logger = LoggerFactory.getLogger(EnhancedNatsMessageService.class);
