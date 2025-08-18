@@ -4,8 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.nats.client.Connection;
 import io.nats.client.Dispatcher;
 import io.nats.client.Message;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -17,9 +16,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Service
+@Slf4j
 public class NatsTestSubscriber {
     
-    private static final Logger logger = LoggerFactory.getLogger(NatsTestSubscriber.class);
     
     private final Connection natsConnection;
     private final ObjectMapper objectMapper;
@@ -43,10 +42,10 @@ public class NatsTestSubscriber {
             dispatcher.subscribe("demo.*");
             dispatcher.subscribe("api.*");
             
-            logger.info("NATS test subscribers started");
+            log.info("NATS test subscribers started");
             
         } catch (Exception e) {
-            logger.error("Failed to start NATS subscribers", e);
+            log.error("Failed to start NATS subscribers", e);
         }
     }
     
@@ -55,7 +54,7 @@ public class NatsTestSubscriber {
         String replyTo = message.getReplyTo();
         String payload = new String(message.getData(), StandardCharsets.UTF_8);
         
-        logger.info("Received message - Subject: {}, ReplyTo: {}, Payload: {}", subject, replyTo, payload);
+        log.info("Received message - Subject: {}, ReplyTo: {}, Payload: {}", subject, replyTo, payload);
         
         try {
             String response = processMessage(subject, payload);
@@ -63,18 +62,18 @@ public class NatsTestSubscriber {
             if (replyTo != null) {
                 // 發送回覆
                 natsConnection.publish(replyTo, response.getBytes(StandardCharsets.UTF_8));
-                logger.info("Sent reply to: {}, Response: {}", replyTo, response);
+                log.info("Sent reply to: {}, Response: {}", replyTo, response);
             }
             
         } catch (Exception e) {
-            logger.error("Error processing message for subject: {}", subject, e);
+            log.error("Error processing message for subject: {}", subject, e);
             
             if (replyTo != null) {
                 try {
                     String errorResponse = createErrorResponse(e.getMessage());
                     natsConnection.publish(replyTo, errorResponse.getBytes(StandardCharsets.UTF_8));
                 } catch (Exception ex) {
-                    logger.error("Failed to send error response", ex);
+                    log.error("Failed to send error response", ex);
                 }
             }
         }
@@ -112,7 +111,7 @@ public class NatsTestSubscriber {
     
     private String processTimeout(String payload) throws Exception {
         // 模擬處理時間，但不會真的timeout (讓NATS client timeout)
-        logger.info("Processing timeout test message: {}", payload);
+        log.info("Processing timeout test message: {}", payload);
         
         // 可以選擇性地延遲回覆來測試timeout
         Thread.sleep(2000); // 2秒延遲
@@ -127,7 +126,7 @@ public class NatsTestSubscriber {
     }
     
     private String processError(String payload) throws Exception {
-        logger.info("Processing error test message: {}", payload);
+        log.info("Processing error test message: {}", payload);
         
         // 模擬處理錯誤
         throw new RuntimeException("Simulated processing error for testing");

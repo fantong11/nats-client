@@ -1,7 +1,6 @@
 package com.example.natsclient.exception;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -13,13 +12,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
-    private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(NatsClientException.class)
     public ResponseEntity<Map<String, Object>> handleNatsClientException(NatsClientException ex) {
-        logger.error("NATS client error - RequestID: {}, Subject: {}, Type: {}", 
+        log.error("NATS client error - RequestID: {}, Subject: {}, Type: {}", 
                     ex.getRequestId(), ex.getSubject(), ex.getErrorType(), ex);
 
         Map<String, Object> errorResponse = new HashMap<>();
@@ -36,7 +35,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationException(MethodArgumentNotValidException ex) {
-        logger.error("Validation error", ex);
+        log.error("Validation error", ex);
 
         Map<String, Object> errorResponse = new HashMap<>();
         errorResponse.put("timestamp", LocalDateTime.now());
@@ -54,7 +53,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
-        logger.error("Unexpected error", ex);
+        log.error("Unexpected error", ex);
 
         Map<String, Object> errorResponse = new HashMap<>();
         errorResponse.put("timestamp", LocalDateTime.now());

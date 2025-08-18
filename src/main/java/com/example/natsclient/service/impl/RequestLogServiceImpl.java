@@ -27,9 +27,20 @@ public class RequestLogServiceImpl implements RequestLogService {
     
     @Override
     public NatsRequestLog createRequestLog(String requestId, String subject, String payload, String correlationId) {
-        NatsRequestLog requestLog = new NatsRequestLog(requestId, subject, payload, correlationId);
-        requestLog.setTimeoutDuration(natsProperties.getRequest().getTimeout());
-        requestLog.setCreatedBy(SYSTEM_USER);
+        NatsRequestLog requestLog = NatsRequestLog.builder()
+                .requestId(requestId)
+                .subject(subject)
+                .requestPayload(payload)
+                .correlationId(correlationId)
+                .status(NatsRequestLog.RequestStatus.PENDING)
+                .requestTimestamp(LocalDateTime.now())
+                .retryCount(0)
+                .timeoutDuration(natsProperties.getRequest().getTimeout())
+                .createdBy(SYSTEM_USER)
+                .createdDate(LocalDateTime.now())
+                .updatedBy(SYSTEM_USER)
+                .updatedDate(LocalDateTime.now())
+                .build();
         return requestLog;
     }
     

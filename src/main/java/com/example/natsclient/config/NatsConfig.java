@@ -5,8 +5,7 @@ import com.example.natsclient.service.impl.K8sCredentialServiceImpl;
 import io.nats.client.Connection;
 import io.nats.client.Nats;
 import io.nats.client.Options;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,9 +15,9 @@ import java.io.IOException;
 import java.time.Duration;
 
 @Configuration
+@Slf4j
 public class NatsConfig {
 
-    private static final Logger logger = LoggerFactory.getLogger(NatsConfig.class);
 
     @Autowired
     private NatsProperties natsProperties;
@@ -39,53 +38,53 @@ public class NatsConfig {
                 .server(natsUrl)
                 .connectionTimeout(Duration.ofMillis(natsProperties.getConnection().getTimeout()))
                 .reconnectWait(Duration.ofMillis(natsProperties.getConnection().getReconnect().getWait()))
-                .maxReconnects(natsProperties.getConnection().getReconnect().getMaxAttempts());
+                .maxReconnects(-1);  // 改進：無限重連，防止永久失敗
         
         // 優先使用Vault/K8s credentials，然後才使用properties配置
         if (vaultCredentials.hasUserPassword()) {
             optionsBuilder.userInfo(vaultCredentials.getUsername(), vaultCredentials.getPassword());
-            logger.info("Using username/password authentication from Vault/K8s");
+            log.info("Using username/password authentication from Vault/K8s");
         } else if (vaultCredentials.hasToken()) {
             optionsBuilder.token(vaultCredentials.getToken());
-            logger.info("Using token authentication from Vault/K8s");
+            log.info("Using token authentication from Vault/K8s");
         } else if (vaultCredentials.hasCredentialsFile()) {
             optionsBuilder.authHandler(Nats.credentials(vaultCredentials.getCredentialsFile()));
-            logger.info("Using credentials file authentication from Vault/K8s");
+            log.info("Using credentials file authentication from Vault/K8s");
         } else if (StringUtils.hasText(natsProperties.getUsername()) && StringUtils.hasText(natsProperties.getPassword())) {
             optionsBuilder.userInfo(natsProperties.getUsername(), natsProperties.getPassword());
-            logger.info("Using username/password authentication from properties");
+            log.info("Using username/password authentication from properties");
         } else if (StringUtils.hasText(natsProperties.getToken())) {
             optionsBuilder.token(natsProperties.getToken());
-            logger.info("Using token authentication from properties");
+            log.info("Using token authentication from properties");
         } else if (StringUtils.hasText(natsProperties.getCredentials())) {
             optionsBuilder.authHandler(Nats.credentials(natsProperties.getCredentials()));
-            logger.info("Using credentials file authentication from properties");
+            log.info("Using credentials file authentication from properties");
         }
         
         Options options = optionsBuilder
                 .connectionListener((conn, type) -> {
-                    logger.info("NATS connection event: {}", type);
+                    log.info("NATS connection event: {}", type);
                 })
                 .errorListener(new io.nats.client.ErrorListener() {
                     @Override
                     public void errorOccurred(Connection conn, String error) {
-                        logger.error("NATS connection error: {}", error);
+                        log.error("NATS connection error: {}", error);
                     }
 
                     @Override
                     public void exceptionOccurred(Connection conn, Exception exp) {
-                        logger.error("NATS connection exception", exp);
+                        log.error("NATS connection exception", exp);
                     }
 
                     @Override
                     public void slowConsumerDetected(Connection conn, io.nats.client.Consumer consumer) {
-                        logger.warn("NATS slow consumer detected: {}", consumer.toString());
+                        log.warn("NATS slow consumer detected: {}", consumer.toString());
                     }
                 })
                 .build();
 
         Connection connection = Nats.connect(options);
-        logger.info("Connected to NATS server: {}", natsUrl);
+        log.info("Connected to NATS server: {} [Enhanced with unlimited reconnection]", natsUrl);
         return connection;
     }
 }

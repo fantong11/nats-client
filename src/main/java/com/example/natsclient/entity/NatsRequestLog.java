@@ -1,6 +1,10 @@
 package com.example.natsclient.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -8,6 +12,10 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "NATS_REQUEST_LOG")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class NatsRequestLog {
 
     @Id
@@ -38,6 +46,7 @@ public class NatsRequestLog {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "STATUS")
+    @Builder.Default
     private RequestStatus status = RequestStatus.PENDING;
 
     @Lob
@@ -45,6 +54,7 @@ public class NatsRequestLog {
     private String errorMessage;
 
     @Column(name = "RETRY_COUNT")
+    @Builder.Default
     private Integer retryCount = 0;
 
     @Column(name = "TIMEOUT_DURATION")
@@ -70,62 +80,4 @@ public class NatsRequestLog {
     public enum RequestStatus {
         PENDING, SUCCESS, FAILED, TIMEOUT, ERROR
     }
-
-    public NatsRequestLog() {}
-
-    public NatsRequestLog(String requestId, String subject, String requestPayload, String correlationId) {
-        this.requestId = requestId;
-        this.subject = subject;
-        this.requestPayload = requestPayload;
-        this.correlationId = correlationId;
-        this.requestTimestamp = LocalDateTime.now();
-    }
-
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public String getRequestId() { return requestId; }
-    public void setRequestId(String requestId) { this.requestId = requestId; }
-
-    public String getSubject() { return subject; }
-    public void setSubject(String subject) { this.subject = subject; }
-
-    public String getRequestPayload() { return requestPayload; }
-    public void setRequestPayload(String requestPayload) { this.requestPayload = requestPayload; }
-
-    public LocalDateTime getRequestTimestamp() { return requestTimestamp; }
-    public void setRequestTimestamp(LocalDateTime requestTimestamp) { this.requestTimestamp = requestTimestamp; }
-
-    public String getResponsePayload() { return responsePayload; }
-    public void setResponsePayload(String responsePayload) { this.responsePayload = responsePayload; }
-
-    public LocalDateTime getResponseTimestamp() { return responseTimestamp; }
-    public void setResponseTimestamp(LocalDateTime responseTimestamp) { this.responseTimestamp = responseTimestamp; }
-
-    public RequestStatus getStatus() { return status; }
-    public void setStatus(RequestStatus status) { this.status = status; }
-
-    public String getErrorMessage() { return errorMessage; }
-    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
-
-    public Integer getRetryCount() { return retryCount; }
-    public void setRetryCount(Integer retryCount) { this.retryCount = retryCount; }
-
-    public Long getTimeoutDuration() { return timeoutDuration; }
-    public void setTimeoutDuration(Long timeoutDuration) { this.timeoutDuration = timeoutDuration; }
-
-    public String getCorrelationId() { return correlationId; }
-    public void setCorrelationId(String correlationId) { this.correlationId = correlationId; }
-
-    public String getCreatedBy() { return createdBy; }
-    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
-
-    public String getUpdatedBy() { return updatedBy; }
-    public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
-
-    public LocalDateTime getCreatedDate() { return createdDate; }
-    public void setCreatedDate(LocalDateTime createdDate) { this.createdDate = createdDate; }
-
-    public LocalDateTime getUpdatedDate() { return updatedDate; }
-    public void setUpdatedDate(LocalDateTime updatedDate) { this.updatedDate = updatedDate; }
 }

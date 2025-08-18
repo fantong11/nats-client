@@ -4,8 +4,8 @@ import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.exception.NatsClientException;
 import com.example.natsclient.repository.NatsRequestLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,9 +18,9 @@ import java.util.concurrent.CompletableFuture;
 
 @Service
 @Transactional
+@Slf4j
 public class NatsOrchestrationService {
 
-    private static final Logger logger = LoggerFactory.getLogger(NatsOrchestrationService.class);
 
     @Autowired
     private NatsClientService natsClientService;
@@ -34,7 +34,7 @@ public class NatsOrchestrationService {
     public CompletableFuture<NatsRequestResponse> sendRequestWithTracking(NatsRequest request) {
         String correlationId = generateCorrelationId();
         
-        logger.info("Processing NATS request - Subject: {}, CorrelationID: {}", 
+        log.info("Processing NATS request - Subject: {}, CorrelationID: {}", 
                    request.getSubject(), correlationId);
 
         try {
@@ -60,7 +60,7 @@ public class NatsOrchestrationService {
                 
                 return result;
             }).exceptionally(throwable -> {
-                logger.error("Error processing NATS request", throwable);
+                log.error("Error processing NATS request", throwable);
                 
                 NatsRequestResponse errorResult = new NatsRequestResponse();
                 errorResult.setCorrelationId(correlationId);
@@ -73,7 +73,7 @@ public class NatsOrchestrationService {
             });
 
         } catch (Exception e) {
-            logger.error("Failed to send NATS request", e);
+            log.error("Failed to send NATS request", e);
             
             CompletableFuture<NatsRequestResponse> errorFuture = new CompletableFuture<>();
             NatsRequestResponse errorResult = new NatsRequestResponse();
@@ -89,7 +89,7 @@ public class NatsOrchestrationService {
     }
 
     public CompletableFuture<Void> publishMessageWithTracking(NatsPublishRequest request) {
-        logger.info("Publishing NATS message - Subject: {}", request.getSubject());
+        log.info("Publishing NATS message - Subject: {}", request.getSubject());
 
         try {
             validatePublishRequest(request);
@@ -97,7 +97,7 @@ public class NatsOrchestrationService {
             return natsClientService.publishMessage(request.getSubject(), request.getPayload());
 
         } catch (Exception e) {
-            logger.error("Failed to publish NATS message", e);
+            log.error("Failed to publish NATS message", e);
             
             CompletableFuture<Void> errorFuture = new CompletableFuture<>();
             errorFuture.completeExceptionally(new NatsClientException(
@@ -261,26 +261,19 @@ public class NatsOrchestrationService {
         return "CORR-" + UUID.randomUUID().toString();
     }
 
+    @Data
     public static class NatsRequest {
         private String subject;
         private Object payload;
-
-        public String getSubject() { return subject; }
-        public void setSubject(String subject) { this.subject = subject; }
-        public Object getPayload() { return payload; }
-        public void setPayload(Object payload) { this.payload = payload; }
     }
 
+    @Data
     public static class NatsPublishRequest {
         private String subject;
         private Object payload;
-
-        public String getSubject() { return subject; }
-        public void setSubject(String subject) { this.subject = subject; }
-        public Object getPayload() { return payload; }
-        public void setPayload(Object payload) { this.payload = payload; }
     }
 
+    @Data
     public static class NatsRequestResponse {
         private String correlationId;
         private String subject;
@@ -288,21 +281,9 @@ public class NatsOrchestrationService {
         private String responsePayload;
         private String errorMessage;
         private LocalDateTime timestamp;
-
-        public String getCorrelationId() { return correlationId; }
-        public void setCorrelationId(String correlationId) { this.correlationId = correlationId; }
-        public String getSubject() { return subject; }
-        public void setSubject(String subject) { this.subject = subject; }
-        public boolean isSuccess() { return success; }
-        public void setSuccess(boolean success) { this.success = success; }
-        public String getResponsePayload() { return responsePayload; }
-        public void setResponsePayload(String responsePayload) { this.responsePayload = responsePayload; }
-        public String getErrorMessage() { return errorMessage; }
-        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
-        public LocalDateTime getTimestamp() { return timestamp; }
-        public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
     }
 
+    @Data
     public static class NatsRequestStatus {
         private String requestId;
         private String correlationId;
@@ -312,25 +293,9 @@ public class NatsOrchestrationService {
         private LocalDateTime responseTimestamp;
         private Integer retryCount;
         private String errorMessage;
-
-        public String getRequestId() { return requestId; }
-        public void setRequestId(String requestId) { this.requestId = requestId; }
-        public String getCorrelationId() { return correlationId; }
-        public void setCorrelationId(String correlationId) { this.correlationId = correlationId; }
-        public String getSubject() { return subject; }
-        public void setSubject(String subject) { this.subject = subject; }
-        public NatsRequestLog.RequestStatus getStatus() { return status; }
-        public void setStatus(NatsRequestLog.RequestStatus status) { this.status = status; }
-        public LocalDateTime getRequestTimestamp() { return requestTimestamp; }
-        public void setRequestTimestamp(LocalDateTime requestTimestamp) { this.requestTimestamp = requestTimestamp; }
-        public LocalDateTime getResponseTimestamp() { return responseTimestamp; }
-        public void setResponseTimestamp(LocalDateTime responseTimestamp) { this.responseTimestamp = responseTimestamp; }
-        public Integer getRetryCount() { return retryCount; }
-        public void setRetryCount(Integer retryCount) { this.retryCount = retryCount; }
-        public String getErrorMessage() { return errorMessage; }
-        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
     }
 
+    @Data
     public static class NatsStatistics {
         private long totalRequests;
         private long pendingRequests;
@@ -339,20 +304,5 @@ public class NatsOrchestrationService {
         private long timeoutRequests;
         private long errorRequests;
         private double successRate;
-
-        public long getTotalRequests() { return totalRequests; }
-        public void setTotalRequests(long totalRequests) { this.totalRequests = totalRequests; }
-        public long getPendingRequests() { return pendingRequests; }
-        public void setPendingRequests(long pendingRequests) { this.pendingRequests = pendingRequests; }
-        public long getSuccessfulRequests() { return successfulRequests; }
-        public void setSuccessfulRequests(long successfulRequests) { this.successfulRequests = successfulRequests; }
-        public long getFailedRequests() { return failedRequests; }
-        public void setFailedRequests(long failedRequests) { this.failedRequests = failedRequests; }
-        public long getTimeoutRequests() { return timeoutRequests; }
-        public void setTimeoutRequests(long timeoutRequests) { this.timeoutRequests = timeoutRequests; }
-        public long getErrorRequests() { return errorRequests; }
-        public void setErrorRequests(long errorRequests) { this.errorRequests = errorRequests; }
-        public double getSuccessRate() { return successRate; }
-        public void setSuccessRate(double successRate) { this.successRate = successRate; }
     }
 }
