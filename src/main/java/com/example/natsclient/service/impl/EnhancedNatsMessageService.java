@@ -27,7 +27,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 
 /**
  * Enhanced NATS Message Service with improved error handling, metrics, and logging.
@@ -72,18 +71,36 @@ public class EnhancedNatsMessageService implements NatsMessageService {
         this.natsProperties = natsProperties;
         
         // Initialize metrics
-        this.requestCounter = Counter.builder("nats.requests.total")
-                .description("Total number of NATS requests")
-                .register(meterRegistry);
-        this.successCounter = Counter.builder("nats.requests.success")
-                .description("Number of successful NATS requests")
-                .register(meterRegistry);
-        this.errorCounter = Counter.builder("nats.requests.error")
-                .description("Number of failed NATS requests")
-                .register(meterRegistry);
-        this.requestTimer = Timer.builder("nats.request.duration")
-                .description("NATS request duration")
-                .register(meterRegistry);
+        this.requestCounter = initializeCounter("nats.requests.total", "Total number of NATS requests", meterRegistry);
+        this.successCounter = initializeCounter("nats.requests.success", "Number of successful NATS requests", meterRegistry);
+        this.errorCounter = initializeCounter("nats.requests.error", "Number of failed NATS requests", meterRegistry);
+        this.requestTimer = initializeTimer("nats.request.duration", "NATS request duration", meterRegistry);
+    }
+    
+    private Counter initializeCounter(String name, String description, MeterRegistry registry) {
+        try {
+            return Counter.builder(name)
+                    .description(description)
+                    .register(registry);
+        } catch (Exception e) {
+            logger.warn("Failed to register counter {}: {}. Using no-op counter.", name, e.getMessage());
+            return Counter.builder(name)
+                    .description(description)
+                    .register(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        }
+    }
+    
+    private Timer initializeTimer(String name, String description, MeterRegistry registry) {
+        try {
+            return Timer.builder(name)
+                    .description(description)
+                    .register(registry);
+        } catch (Exception e) {
+            logger.warn("Failed to register timer {}: {}. Using no-op timer.", name, e.getMessage());
+            return Timer.builder(name)
+                    .description(description)
+                    .register(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        }
     }
     
     @Override

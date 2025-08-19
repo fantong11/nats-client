@@ -10,8 +10,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @Component
 public class NatsMetricsCollector {
-
-    private final MeterRegistry meterRegistry;
     
     private final Counter totalRequestsCounter;
     private final Counter successfulRequestsCounter;
@@ -26,7 +24,6 @@ public class NatsMetricsCollector {
     private final AtomicLong pendingRequestsGauge = new AtomicLong(0);
 
     public NatsMetricsCollector(MeterRegistry meterRegistry) {
-        this.meterRegistry = meterRegistry;
         
         // Request counters
         this.totalRequestsCounter = Counter.builder("nats.requests.total")

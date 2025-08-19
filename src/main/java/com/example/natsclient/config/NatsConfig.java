@@ -45,7 +45,7 @@ public class NatsConfig {
             optionsBuilder.userInfo(vaultCredentials.getUsername(), vaultCredentials.getPassword());
             log.info("Using username/password authentication from Vault/K8s");
         } else if (vaultCredentials.hasToken()) {
-            optionsBuilder.token(vaultCredentials.getToken());
+            optionsBuilder.authHandler(Nats.staticCredentials(null, vaultCredentials.getToken().toCharArray()));
             log.info("Using token authentication from Vault/K8s");
         } else if (vaultCredentials.hasCredentialsFile()) {
             optionsBuilder.authHandler(Nats.credentials(vaultCredentials.getCredentialsFile()));
@@ -54,7 +54,7 @@ public class NatsConfig {
             optionsBuilder.userInfo(natsProperties.getUsername(), natsProperties.getPassword());
             log.info("Using username/password authentication from properties");
         } else if (StringUtils.hasText(natsProperties.getToken())) {
-            optionsBuilder.token(natsProperties.getToken());
+            optionsBuilder.authHandler(Nats.staticCredentials(null, natsProperties.getToken().toCharArray()));
             log.info("Using token authentication from properties");
         } else if (StringUtils.hasText(natsProperties.getCredentials())) {
             optionsBuilder.authHandler(Nats.credentials(natsProperties.getCredentials()));

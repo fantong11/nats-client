@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 @Service
 public class NatsResponseHandler {
@@ -99,7 +100,7 @@ public class NatsResponseHandler {
     @Transactional
     private void processResponse(String subject, String responsePayload, Message message) {
         try {
-            Map<String, Object> responseData = objectMapper.readValue(responsePayload, Map.class);
+            Map<String, Object> responseData = objectMapper.readValue(responsePayload, new TypeReference<Map<String, Object>>() {});
             
             String requestId = extractRequestId(responseData, message);
             String correlationId = extractCorrelationId(responseData, message);

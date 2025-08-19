@@ -60,8 +60,9 @@ class NatsMessageServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        when(natsProperties.getRequest()).thenReturn(requestProperties);
-        when(requestProperties.getTimeout()).thenReturn(30000L);
+        // Configure common mock behavior - only when actually used
+        lenient().when(natsProperties.getRequest()).thenReturn(requestProperties);
+        lenient().when(requestProperties.getTimeout()).thenReturn(30000L);
     }
 
     @Test
@@ -104,7 +105,7 @@ class NatsMessageServiceImplTest {
 
         // Act & Assert
         assertThrows(NatsTimeoutException.class, () -> {
-            natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId).get();
+            natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId);
         });
 
         verify(requestLogService).updateWithTimeout(anyString(), eq("No response received within timeout period"));
@@ -133,11 +134,7 @@ class NatsMessageServiceImplTest {
 
         // Act & Assert
         assertThrows(NatsRequestException.class, () -> {
-            try {
-                natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId).get();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+            natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId);
         });
 
         verify(requestLogService).updateWithError(anyString(), contains("Serialization failed"));
@@ -156,11 +153,7 @@ class NatsMessageServiceImplTest {
 
         // Act & Assert
         assertThrows(NatsRequestException.class, () -> {
-            try {
-                natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId).get();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+            natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId);
         });
 
         verify(requestLogService).updateWithError(anyString(), contains("Connection failed"));
@@ -169,7 +162,7 @@ class NatsMessageServiceImplTest {
     @Test
     void publishMessage_Success_ShouldCompleteSuccessfully() throws Exception {
         // Arrange
-        NatsRequestLog mockRequestLog = new NatsRequestLog();
+        NatsRequestLog mockRequestLog = mock(NatsRequestLog.class);
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), isNull()))
@@ -212,11 +205,7 @@ class NatsMessageServiceImplTest {
 
         // Act & Assert
         assertThrows(NatsRequestException.class, () -> {
-            try {
-                natsMessageService.publishMessage(testSubject, testPayload).get();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+            natsMessageService.publishMessage(testSubject, testPayload);
         });
 
         verify(requestLogService).updateWithError(anyString(), contains("Publish failed"));

@@ -101,6 +101,9 @@ public class NatsMessageServiceImpl implements NatsMessageService {
                 return handleTimeoutResponse(requestId);
             }
             
+        } catch (NatsTimeoutException e) {
+            // Re-throw timeout exceptions directly without wrapping
+            throw e;
         } catch (Exception e) {
             return handleErrorResponse(requestId, e);
         }

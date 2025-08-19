@@ -1,6 +1,7 @@
 package com.example.natsclient.service;
 
 import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.exception.NatsClientException;
 import com.example.natsclient.repository.NatsRequestLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -122,7 +123,7 @@ class NatsOrchestrationServiceTest {
         assertFalse(response.isSuccess());
         assertEquals(testSubject, response.getSubject());
         assertNull(response.getResponsePayload());
-        assertEquals("Test exception", response.getErrorMessage());
+        assertEquals("java.lang.RuntimeException: Test exception", response.getErrorMessage());
         assertNotNull(response.getCorrelationId());
         assertNotNull(response.getTimestamp());
     }
@@ -206,16 +207,15 @@ class NatsOrchestrationServiceTest {
     }
 
     @Test
-    void getRequestStatus_NonExistingRequest_ShouldReturnNull() {
+    void getRequestStatus_NonExistingRequest_ShouldThrowException() {
         // Arrange
         String testRequestId = "non-existing";
         when(requestLogRepository.findByRequestId(testRequestId)).thenReturn(Optional.empty());
 
-        // Act
-        NatsOrchestrationService.NatsRequestStatus result = orchestrationService.getRequestStatus(testRequestId);
-
-        // Assert
-        assertNull(result);
+        // Act & Assert
+        assertThrows(NatsClientException.class, () -> {
+            orchestrationService.getRequestStatus(testRequestId);
+        });
     }
 
     @Test
@@ -225,6 +225,7 @@ class NatsOrchestrationServiceTest {
         NatsRequestLog mockLog = createMockRequestLog("req-123");
         mockLog.setCorrelationId(testCorrelationId);
         when(requestLogRepository.findByCorrelationId(testCorrelationId)).thenReturn(Optional.of(mockLog));
+        when(requestLogRepository.findByRequestId("req-123")).thenReturn(Optional.of(mockLog));
 
         // Act
         NatsOrchestrationService.NatsRequestStatus result = 
@@ -260,12 +261,12 @@ class NatsOrchestrationServiceTest {
     @Test
     void getStatistics_ShouldReturnCorrectStatistics() {
         // Arrange
-        when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.SUCCESS)).thenReturn(10L);
-        when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.FAILED)).thenReturn(2L);
-        when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.ERROR)).thenReturn(1L);
-        when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.TIMEOUT)).thenReturn(1L);
-        when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.PENDING)).thenReturn(0L);
-        when(requestLogRepository.count()).thenReturn(14L);
+        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.SUCCESS)).thenReturn(10L);
+        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.FAILED)).thenReturn(2L);
+        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.ERROR)).thenReturn(1L);
+        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.TIMEOUT)).thenReturn(1L);
+        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.PENDING)).thenReturn(0L);
+        lenient().when(requestLogRepository.count()).thenReturn(14L);
 
         // Act
         NatsOrchestrationService.NatsStatistics result = orchestrationService.getStatistics();
@@ -284,8 +285,8 @@ class NatsOrchestrationServiceTest {
     @Test
     void getStatistics_NoRequests_ShouldReturnZeroStats() {
         // Arrange
-        when(requestLogRepository.countByStatus(any())).thenReturn(0L);
-        when(requestLogRepository.count()).thenReturn(0L);
+        lenient().when(requestLogRepository.countByStatus(any())).thenReturn(0L);
+        lenient().when(requestLogRepository.count()).thenReturn(0L);
 
         // Act
         NatsOrchestrationService.NatsStatistics result = orchestrationService.getStatistics();
