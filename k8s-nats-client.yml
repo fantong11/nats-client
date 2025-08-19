@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats-client-app
+  labels:
+    app: nats-client-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats-client-app
+  template:
+    metadata:
+      labels:
+        app: nats-client-app
+    spec:
+      containers:
+      - name: nats-client
+        image: nats-client:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: NATS_URL
+          value: "nats://nats:4222"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "local"
+        - name: SPRING_CLOUD_VAULT_ENABLED
+          value: "false"
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:oracle:thin:@oracle-db:1521:xe"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "system"
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: "oracle123"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        imagePullPolicy: Never
+      initContainers:
+      - name: wait-for-nats
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z nats 4222; do echo waiting for nats; sleep 2; done;']
+      - name: wait-for-oracle
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z oracle-db 1521; do echo waiting for oracle; sleep 2; done;']
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-client-app
+  labels:
+    app: nats-client-app
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  selector:
+    app: nats-client-app
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-client-external
+  labels:
+    app: nats-client-app
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
+    name: http
+  selector:
+    app: nats-client-app
+  type: NodePort
