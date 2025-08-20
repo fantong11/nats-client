@@ -1,146 +1,191 @@
 # NATS Client Service
 
-A Spring Boot application that provides a robust NATS client service with Oracle database integration for tracking requests and responses.
+A production-ready Spring Boot microservice that provides robust NATS messaging capabilities with Oracle database integration, comprehensive error handling, and monitoring features.
 
-## Features
+## 🚀 Features
 
-- **NATS Integration**: Send JSON requests and handle async responses
-- **Oracle Database**: Track all requests/responses with comprehensive logging
-- **Exception Handling**: Robust error handling for timeouts, connection issues, and bad requests
-- **Retry Mechanism**: Automatic retry for failed requests with configurable parameters
-- **Async Response Handling**: Handle delayed responses through separate NATS subjects
-- **REST API**: Complete REST endpoints for testing and monitoring
-- **Statistics**: Real-time statistics and monitoring capabilities
+- **Enterprise NATS Integration**: High-performance messaging with request-response and publish-subscribe patterns
+- **Oracle Database Persistence**: Complete audit trail with request/response logging and statistics
+- **Advanced Error Handling**: Comprehensive exception management with intelligent retry mechanisms
+- **Security & Authentication**: Multiple NATS authentication methods with TLS support
+- **Monitoring & Observability**: Real-time metrics, health checks, and detailed logging
+- **Kubernetes Ready**: Production deployment configurations with secrets management
+- **High Availability**: Connection pooling, retry logic, and graceful degradation
 
-## Configuration
+## 🏗️ Architecture
 
-### Database Configuration
-Update `application.yml` with your Oracle database details:
+```
+┌─────────────────┐    ┌──────────────┐    ┌─────────────┐
+│   REST API      │────│ NATS Client  │────│ NATS Server │
+│                 │    │   Service    │    │             │
+└─────────────────┘    └──────┬───────┘    └─────────────┘
+                              │
+                              ▼
+                       ┌──────────────┐
+                       │ Oracle DB    │
+                       │ (Audit Log)  │
+                       └──────────────┘
+```
+
+## 📋 Prerequisites
+
+- **Java**: 17 or higher
+- **Maven**: 3.6+ (included in project)
+- **NATS Server**: 2.x
+- **Oracle Database**: 12c or higher
+- **Docker** (for containerized deployment)
+- **Kubernetes** (for K8s deployment)
+
+## 🚀 Quick Start
+
+### 1. Clone and Setup
+```bash
+git clone <repository-url>
+cd nats-client
+```
+
+### 2. Database Setup
+Execute the database schema:
+```sql
+-- Run the SQL script in src/main/resources/schema.sql
+```
+
+### 3. Configuration
+Update `src/main/resources/application.yml`:
 ```yaml
 spring:
   datasource:
     url: jdbc:oracle:thin:@localhost:1521:xe
     username: your_username
     password: your_password
-```
 
-### NATS Configuration
-Configure NATS connection in `application.yml`:
-```yaml
 nats:
   url: nats://localhost:4222
-  connection:
-    timeout: 10000
-    reconnect:
-      wait: 2000
-      max-attempts: 10
-  request:
-    timeout: 30000
 ```
 
-## Database Setup
+### 4. Run Application
+```bash
+# Using Maven wrapper (recommended)
+./apache-maven-3.9.6/bin/mvn spring-boot:run
 
-Run the SQL script in `src/main/resources/schema.sql` to create the required table and sequences.
-
-## API Endpoints
-
-### Send Request
-```
-POST /api/nats/request
-Content-Type: application/json
-
-{
-  "subject": "your.subject",
-  "payload": {
-    "key": "value"
-  }
-}
+# Or with profile
+./apache-maven-3.9.6/bin/mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-### Publish Message
-```
-POST /api/nats/publish
-Content-Type: application/json
-
-{
-  "subject": "your.subject",
-  "payload": {
-    "key": "value"
-  }
-}
+### 5. Verify Installation
+```bash
+curl http://localhost:8080/api/nats/health
 ```
 
-### Get Request Status
-```
-GET /api/nats/status/{requestId}
-GET /api/nats/status/correlation/{correlationId}
-```
+## 🧪 Testing
 
-### Get Requests by Status
-```
-GET /api/nats/requests/{status}
-```
-Status values: PENDING, SUCCESS, FAILED, TIMEOUT, ERROR
-
-### Get Statistics
-```
-GET /api/nats/statistics
+### Unit Tests
+```bash
+./apache-maven-3.9.6/bin/mvn test
 ```
 
-### Health Check
-```
-GET /api/nats/health
-```
-
-### Test Endpoints
-```
-POST /api/nats/test/echo
-POST /api/nats/test/timeout
-POST /api/nats/test/error
+### Integration Tests
+```bash
+./apache-maven-3.9.6/bin/mvn test -Dtest="*IntegrationTest"
 ```
 
-## Exception Handling
+### API Testing
+Use the provided `test-api.http` file with your HTTP client, or:
+```bash
+# Health check
+curl http://localhost:8080/api/nats/health
 
-The service handles various error scenarios:
+# Echo test
+curl -X POST http://localhost:8080/api/nats/test/echo \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Hello NATS!"}'
+```
 
-1. **Connection Errors**: NATS server unavailable
-2. **Timeouts**: No response within configured timeout
-3. **Serialization Errors**: Invalid JSON payload
-4. **Validation Errors**: Missing required fields
-5. **No Response**: Request sent but no response received
-6. **Bad Request**: Invalid request format
+## 🐳 Deployment
 
-## Retry Mechanism
+### Docker Compose (Recommended)
+```bash
+docker-compose -f docker-compose-with-app.yml up -d
+```
 
-- Automatic retry for failed requests
-- Maximum 3 retry attempts
-- 5-minute delay between retries
-- Configurable retry strategies
-- Intelligent error classification (some errors are not retryable)
+### Kubernetes
+```bash
+kubectl apply -f k8s-deploy-all.yml
+```
 
-## Monitoring
+## 📚 Documentation
 
-- Real-time request statistics
-- Request/response tracking in Oracle database
-- Comprehensive logging
-- Health check endpoints
+- [**Testing Guide**](docs/TESTING.md) - Comprehensive testing strategies and examples
+- [**Deployment Guide**](docs/DEPLOYMENT.md) - Production deployment instructions
+- [**API Documentation**](docs/API.md) - Complete API reference
+- [**Development Setup**](docs/DEVELOPMENT.md) - Local development environment setup
+- [**Troubleshooting**](docs/TROUBLESHOOTING.md) - Common issues and solutions
 
-## Running the Application
+## 🔧 Configuration
 
-1. Ensure Oracle database and NATS server are running
-2. Update configuration in `application.yml`
-3. Run the database schema script
-4. Start the application:
-   ```bash
-   mvn spring-boot:run
-   ```
+### Environment Variables
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DB_USERNAME` | Database username | `your_username` |
+| `DB_PASSWORD` | Database password | `your_password` |
+| `DB_HOST` | Database host | `localhost` |
+| `NATS_URL` | NATS server URL | `nats://localhost:4222` |
+| `NATS_USERNAME` | NATS username | - |
+| `NATS_PASSWORD` | NATS password | - |
+| `NATS_TOKEN` | NATS token | - |
 
-## Testing
+### Profiles
+- **default**: Standard configuration
+- **local**: Local development with relaxed security
+- **kubernetes**: Production K8s deployment
 
-Use the provided test endpoints to verify functionality:
+## 📊 Monitoring
 
-1. **Echo Test**: Tests basic request/response cycle
-2. **Timeout Test**: Tests timeout handling
-3. **Error Test**: Tests error handling
+### Health Endpoints
+- `/api/nats/health` - Service health status
+- `/api/nats/statistics` - Real-time statistics
+- `/actuator/health` - Spring Boot health checks
 
-The service will log all activities and store request/response data in the Oracle database for auditing and monitoring purposes.
+### Metrics
+- Request/response counts
+- Error rates and types
+- Response times
+- Connection status
+
+## 🔒 Security
+
+### Authentication Methods
+- Username/Password
+- Token-based
+- Credential files
+- TLS/SSL encryption
+
+### Best Practices
+- Credentials stored as environment variables
+- TLS encryption for production
+- Request validation and sanitization
+- Comprehensive audit logging
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Run tests (`./apache-maven-3.9.6/bin/mvn test`)
+4. Commit changes (`git commit -m 'Add amazing feature'`)
+5. Push to branch (`git push origin feature/amazing-feature`)
+6. Create Pull Request
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **Documentation**: Check the `docs/` directory
+- **Issues**: Create GitHub issues for bugs
+- **Questions**: Use GitHub Discussions
+
+## 🔄 Version History
+
+- **0.0.1-SNAPSHOT**: Initial release with basic NATS integration
+- Current: Enhanced error handling, monitoring, and Kubernetes support

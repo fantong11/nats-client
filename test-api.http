@@ -1,56 +1,330 @@
-### NATS Client API Testing
+###
+# NATS Client Service API Testing
+# Use this file with IntelliJ IDEA, VS Code REST Client, or similar HTTP client
+###
 
-### 1. Health Check
-GET http://localhost:8080/api/nats/health
+### Variables
+@baseUrl = http://localhost:8080/api/nats
+@contentType = application/json
 
-### 2. Test Echo (Simple Request-Response)
-POST http://localhost:8080/api/nats/test/echo
-Content-Type: application/json
+###
+# 1. Health Check - Verify service is running
+GET {{baseUrl}}/health
+
+###
+# 2. Service Statistics - View real-time metrics
+GET {{baseUrl}}/statistics
+
+###
+# 3. Echo Test - Test basic request-response functionality
+POST {{baseUrl}}/test/echo
+Content-Type: {{contentType}}
 
 {
-  "message": "Hello NATS!",
-  "metadata": "test from REST API"
+  "message": "Hello NATS from HTTP client!",
+  "metadata": "API testing with .http file"
 }
 
-### 3. Test Timeout
-POST http://localhost:8080/api/nats/test/timeout
-Content-Type: application/json
+###
+# 4. Timeout Test - Test timeout handling
+POST {{baseUrl}}/test/timeout
+Content-Type: {{contentType}}
 
-### 4. Test Error Handling
-POST http://localhost:8080/api/nats/test/error
-Content-Type: application/json
+{
+  "delayMs": 35000
+}
 
-### 5. Generic NATS Request
-POST http://localhost:8080/api/nats/request
-Content-Type: application/json
+###
+# 5. Error Handling Test - Test error scenarios
+POST {{baseUrl}}/test/error
+Content-Type: {{contentType}}
+
+{
+  "errorType": "validation",
+  "errorMessage": "Test validation error scenario"
+}
+
+###
+# 6. Generic NATS Request - User creation example
+POST {{baseUrl}}/request
+Content-Type: {{contentType}}
 
 {
   "subject": "demo.user.create",
   "payload": {
-    "username": "john_doe",
-    "email": "john@example.com",
+    "username": "john_doe_{{$timestamp}}",
+    "email": "john.doe+{{$timestamp}}@example.com",
+    "firstName": "John",
+    "lastName": "Doe",
     "action": "create_user"
-  }
+  },
+  "timeout": 30000,
+  "correlationId": "user-create-{{$timestamp}}"
 }
 
-### 6. Publish Message (Fire and Forget)
-POST http://localhost:8080/api/nats/publish
-Content-Type: application/json
+###
+# 7. NATS Request - Order processing example
+POST {{baseUrl}}/request
+Content-Type: {{contentType}}
+
+{
+  "subject": "order.process",
+  "payload": {
+    "orderId": "ORD-{{$timestamp}}",
+    "customerId": "CUST-12345",
+    "items": [
+      {
+        "productId": "PROD-001",
+        "quantity": 2,
+        "price": 29.99
+      },
+      {
+        "productId": "PROD-002",
+        "quantity": 1,
+        "price": 49.99
+      }
+    ],
+    "totalAmount": 109.97,
+    "currency": "USD"
+  },
+  "timeout": 45000,
+  "correlationId": "order-{{$timestamp}}"
+}
+
+###
+# 8. Publish Message - Fire-and-forget notification
+POST {{baseUrl}}/publish
+Content-Type: {{contentType}}
 
 {
   "subject": "api.notification.send",
   "payload": {
-    "userId": "12345",
-    "message": "Welcome to our service!",
-    "type": "welcome"
+    "userId": "user-{{$timestamp}}",
+    "type": "welcome",
+    "title": "Welcome to our service!",
+    "message": "Thank you for joining us. Your account has been created successfully.",
+    "channel": "email",
+    "priority": "normal"
+  },
+  "correlationId": "notification-{{$timestamp}}"
+}
+
+###
+# 9. Publish Message - System event
+POST {{baseUrl}}/publish
+Content-Type: {{contentType}}
+
+{
+  "subject": "system.audit.log",
+  "payload": {
+    "eventType": "API_ACCESS",
+    "userId": "admin",
+    "action": "TEST_API_CALL",
+    "resource": "/api/nats/publish",
+    "timestamp": "{{$isoTimestamp}}",
+    "ipAddress": "127.0.0.1",
+    "userAgent": "HTTP Client"
   }
 }
 
-### 7. Get Request Status
-GET http://localhost:8080/api/nats/status/{{requestId}}
+###
+# 10. Get Request Status by ID
+# Note: Replace {requestId} with actual request ID from previous responses
+GET {{baseUrl}}/status/550e8400-e29b-41d4-a716-446655440000
 
-### 8. Get Requests by Status
-GET http://localhost:8080/api/nats/requests/SUCCESS
+###
+# 11. Get Request by Correlation ID
+# Note: Replace {correlationId} with actual correlation ID
+GET {{baseUrl}}/status/correlation/user-create-1234567890
 
-### 9. Get NATS Statistics
-GET http://localhost:8080/api/nats/statistics
+###
+# 12. Get All Successful Requests
+GET {{baseUrl}}/requests/SUCCESS?page=0&size=10
+
+###
+# 13. Get All Failed Requests
+GET {{baseUrl}}/requests/FAILED?page=0&size=5
+
+###
+# 14. Get All Pending Requests
+GET {{baseUrl}}/requests/PENDING?page=0&size=20&sort=createdAt&direction=DESC
+
+###
+# 15. Get All Timeout Requests
+GET {{baseUrl}}/requests/TIMEOUT
+
+###
+# 16. Complex NATS Request with Custom Headers
+POST {{baseUrl}}/request
+Content-Type: {{contentType}}
+X-Request-Source: HTTP-Client
+X-User-ID: test-user-123
+
+{
+  "subject": "complex.workflow.start",
+  "payload": {
+    "workflowId": "WF-{{$timestamp}}",
+    "type": "DATA_PROCESSING",
+    "steps": [
+      {
+        "id": 1,
+        "name": "validate_input",
+        "timeout": 5000
+      },
+      {
+        "id": 2,
+        "name": "process_data",
+        "timeout": 30000
+      },
+      {
+        "id": 3,
+        "name": "save_results",
+        "timeout": 10000
+      }
+    ],
+    "metadata": {
+      "priority": "high",
+      "retryCount": 3,
+      "tags": ["api-test", "workflow", "automation"]
+    }
+  },
+  "timeout": 60000,
+  "retryAttempts": 2,
+  "correlationId": "workflow-{{$timestamp}}"
+}
+
+###
+# 17. Batch Request Simulation
+POST {{baseUrl}}/request
+Content-Type: {{contentType}}
+
+{
+  "subject": "batch.data.import",
+  "payload": {
+    "batchId": "BATCH-{{$timestamp}}",
+    "recordCount": 1000,
+    "source": "api_testing",
+    "format": "json",
+    "data": [
+      {
+        "id": 1,
+        "name": "Test Record 1",
+        "value": "test_value_1"
+      },
+      {
+        "id": 2,
+        "name": "Test Record 2",
+        "value": "test_value_2"
+      }
+    ]
+  },
+  "timeout": 120000,
+  "correlationId": "batch-import-{{$timestamp}}"
+}
+
+###
+# 18. Invalid Request - Missing Subject (Should fail)
+POST {{baseUrl}}/request
+Content-Type: {{contentType}}
+
+{
+  "payload": {
+    "message": "This should fail - missing subject"
+  }
+}
+
+###
+# 19. Invalid Request - Empty Payload (Should fail)
+POST {{baseUrl}}/request
+Content-Type: {{contentType}}
+
+{
+  "subject": "test.invalid",
+  "payload": null
+}
+
+###
+# 20. Large Payload Test
+POST {{baseUrl}}/request
+Content-Type: {{contentType}}
+
+{
+  "subject": "test.large.payload",
+  "payload": {
+    "description": "Large payload test",
+    "data": "{{$randomText}}",
+    "largeArray": [
+      {{#repeat 100}}
+      {
+        "id": "{{$randomInt}}",
+        "value": "{{$randomAlphaNumeric}}",
+        "timestamp": "{{$isoTimestamp}}"
+      }{{#unless @last}},{{/unless}}
+      {{/repeat}}
+    ]
+  },
+  "timeout": 60000
+}
+
+###
+# 21. Special Characters Test
+POST {{baseUrl}}/request
+Content-Type: {{contentType}}
+
+{
+  "subject": "test.special.characters",
+  "payload": {
+    "text": "Special characters: αβγδε 中文测试 🚀🔥💯",
+    "unicode": "Ω≈ç√∫~µ≤≥÷",
+    "json_escape": "Quotes \"test\" and backslashes \\test\\",
+    "emoji": "😀😍🎉🚀💻🌟"
+  },
+  "correlationId": "special-chars-{{$timestamp}}"
+}
+
+###
+# 22. Performance Test - Quick Response Expected
+POST {{baseUrl}}/test/echo
+Content-Type: {{contentType}}
+
+{
+  "message": "Performance test - measure response time",
+  "metadata": "{{$isoTimestamp}}"
+}
+
+###
+# 23. High Priority Request
+POST {{baseUrl}}/request
+Content-Type: {{contentType}}
+X-Priority: high
+X-Trace-Id: trace-{{$timestamp}}
+
+{
+  "subject": "priority.high.request",
+  "payload": {
+    "urgent": true,
+    "level": "critical",
+    "message": "High priority request for immediate processing"
+  },
+  "timeout": 5000,
+  "retryAttempts": 1,
+  "correlationId": "priority-{{$timestamp}}"
+}
+
+###
+# 24. Statistics with Time Period Filter
+GET {{baseUrl}}/statistics?period=HOUR
+
+###
+# 25. Statistics for Daily Report
+GET {{baseUrl}}/statistics?period=DAY
+
+###
+# END OF API TESTS
+# 
+# Tips for using this file:
+# 1. Replace placeholder values (like request IDs) with actual values from responses
+# 2. Use environment variables for different environments (dev, staging, prod)
+# 3. Monitor response times and status codes
+# 4. Check the application logs for detailed execution traces
+# 5. Use the health endpoint to verify service status before running other tests
