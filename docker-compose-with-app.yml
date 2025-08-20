@@ -15,6 +15,14 @@ services:
       - "--log"
       - "/dev/stdout"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/varz"]
       interval: 30s
@@ -37,6 +45,14 @@ services:
     networks:
       - nats-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '0.5'
     healthcheck:
       test: ["CMD", "sqlplus", "-S", "sys/oracle123@localhost:1521/XE", "as", "sysdba", "<<<", "SELECT 1 FROM DUAL;"]
       interval: 30s
@@ -63,6 +79,14 @@ services:
     networks:
       - nats-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s

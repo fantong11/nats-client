@@ -45,6 +45,13 @@ spec:
         - "nats-server"
         - "--log"
         - "/dev/stdout"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
         livenessProbe:
           httpGet:
             path: /varz
@@ -110,6 +117,13 @@ spec:
           value: "oracle123"
         - name: ORACLE_CHARACTERSET
           value: "AL32UTF8"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
         volumeMounts:
         - name: oracle-data
           mountPath: /opt/oracle/oradata
@@ -193,6 +207,13 @@ spec:
           value: "system"
         - name: SPRING_DATASOURCE_PASSWORD
           value: "oracle123"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
         livenessProbe:
           httpGet:
             path: /actuator/health
@@ -214,9 +235,23 @@ spec:
       - name: wait-for-nats
         image: busybox:1.35
         command: ['sh', '-c', 'until nc -z nats 4222; do echo waiting for nats; sleep 2; done;']
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
       - name: wait-for-oracle
         image: busybox:1.35
         command: ['sh', '-c', 'until nc -z oracle-db 1521; do echo waiting for oracle; sleep 2; done;']
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
 ---
 # NATS Client Application Service (External Access)
 apiVersion: v1

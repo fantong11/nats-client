@@ -376,6 +376,49 @@ spec:
 ```
 
 ### Resource Management
+
+All containers in this project have proper resource limits configured to prevent "noisy neighbor" issues:
+
+#### Container Resource Allocations
+```yaml
+# NATS Server
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+
+# Oracle Database
+resources:
+  requests:
+    memory: "2Gi"
+    cpu: "500m"
+  limits:
+    memory: "4Gi"
+    cpu: "2000m"
+
+# NATS Client Application
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+# Init Containers (busybox)
+resources:
+  requests:
+    memory: "16Mi"
+    cpu: "10m"
+  limits:
+    memory: "32Mi"
+    cpu: "50m"
+```
+
+#### Resource Quotas
 ```yaml
 # Resource Quotas
 apiVersion: v1
@@ -384,10 +427,10 @@ metadata:
   name: nats-client-quota
 spec:
   hard:
-    requests.cpu: "2"
-    requests.memory: 4Gi
-    limits.cpu: "4"
-    limits.memory: 8Gi
+    requests.cpu: "3"
+    requests.memory: 6Gi
+    limits.cpu: "6"
+    limits.memory: 12Gi
     pods: "10"
 
 # Horizontal Pod Autoscaler
