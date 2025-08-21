@@ -24,6 +24,7 @@ spring:
 
 nats:
   url: ${NATS_URL:nats://localhost:4222}
+  connection-name: ${NATS_CONNECTION_NAME:nats-client-service}
   # Authentication options (choose one)
   username: ${NATS_USERNAME:}
   password: ${NATS_PASSWORD:}
@@ -31,12 +32,16 @@ nats:
   credentials: ${NATS_CREDENTIALS_FILE:}
   
   connection:
-    timeout: 10000
+    timeout: ${NATS_CONNECTION_TIMEOUT:10000}
+    ping-interval: ${NATS_PING_INTERVAL:120000}
+    request-cleanup-interval: ${NATS_REQUEST_CLEANUP_INTERVAL:300000}
+    no-echo: ${NATS_NO_ECHO:false}
+    max-control-line: ${NATS_MAX_CONTROL_LINE:1024}
     reconnect:
-      wait: 2000
-      max-attempts: 10
+      wait: ${NATS_RECONNECT_WAIT:2000}
+      max-attempts: ${NATS_MAX_RECONNECTS:-1}
   request:
-    timeout: 30000
+    timeout: ${NATS_REQUEST_TIMEOUT:30000}
     
   # TLS configuration
   tls:
@@ -45,6 +50,12 @@ nats:
     keystorePassword: ${NATS_TLS_KEYSTORE_PASSWORD:}
     truststore: ${NATS_TLS_TRUSTSTORE:}
     truststorePassword: ${NATS_TLS_TRUSTSTORE_PASSWORD:}
+  
+  # Logging configuration
+  logging:
+    enable-connection-events: ${NATS_LOG_CONNECTION_EVENTS:true}
+    enable-error-logging: ${NATS_LOG_ERRORS:true}
+    enable-slow-consumer-warning: ${NATS_LOG_SLOW_CONSUMER:true}
 
 logging:
   level:
@@ -65,6 +76,8 @@ spring:
 
 # Vault Agent 和 K8s Secret 掛載路徑
 nats:
+  url: ${NATS_URL:nats://nats-server:4222}
+  connection-name: ${NATS_CONNECTION_NAME:nats-client-k8s}
   credentials:
     vault-path: /vault/secrets
     k8s-secret-path: /etc/secrets/nats
@@ -82,4 +95,5 @@ spring:
 
 nats:
   url: nats://localhost:14222
+  connection-name: ${NATS_CONNECTION_NAME:nats-client-local}
   # 本地開發不需要認證

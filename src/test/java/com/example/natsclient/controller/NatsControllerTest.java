@@ -23,6 +23,8 @@ import static org.mockito.Mockito.*;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 
 @ExtendWith(MockitoExtension.class)
 @WebMvcTest(NatsController.class)
@@ -170,7 +172,7 @@ class NatsControllerTest {
     void publishMessage_ValidRequest_ShouldReturnSuccess() throws Exception {
         // Arrange
         when(orchestrationService.publishMessageWithTracking(any(NatsOrchestrationService.NatsPublishRequest.class)))
-                .thenReturn(CompletableFuture.completedFuture(null));
+                .thenReturn(CompletableFuture.completedFuture("test-request-id-123"));
 
         String requestJson = """
                 {
@@ -185,8 +187,12 @@ class NatsControllerTest {
         mockMvc.perform(post("/api/nats/publish")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
+                .andExpect(request().asyncStarted())
+                .andDo(result -> mockMvc.perform(asyncDispatch(result)))
                 .andExpect(status().isOk())
-                .andExpect(content().string("Message published successfully"));
+                .andExpect(jsonPath("$.requestId").value("test-request-id-123"))
+                .andExpect(jsonPath("$.status").value("PUBLISHED"))
+                .andExpect(jsonPath("$.subject").value("test.publish"));
 
         verify(orchestrationService).publishMessageWithTracking(any(NatsOrchestrationService.NatsPublishRequest.class));
     }
@@ -194,7 +200,7 @@ class NatsControllerTest {
     @Test
     void publishMessage_Exception_ShouldReturn500() throws Exception {
         // Arrange
-        CompletableFuture<Void> failedFuture = new CompletableFuture<>();
+        CompletableFuture<String> failedFuture = new CompletableFuture<>();
         failedFuture.completeExceptionally(new RuntimeException("Publish failed"));
         
         when(orchestrationService.publishMessageWithTracking(any(NatsOrchestrationService.NatsPublishRequest.class)))
@@ -213,8 +219,11 @@ class NatsControllerTest {
         mockMvc.perform(post("/api/nats/publish")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
+                .andExpect(request().asyncStarted())
+                .andDo(result -> mockMvc.perform(asyncDispatch(result)))
                 .andExpect(status().isInternalServerError())
-                .andExpect(content().string(containsString("Failed to publish message")));
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.message").value(containsString("Failed to publish message")));
     }
 
     @Test

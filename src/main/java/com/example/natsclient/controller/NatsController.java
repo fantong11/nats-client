@@ -45,7 +45,7 @@ public class NatsController {
     }
 
     @PostMapping("/publish")
-    public CompletableFuture<ResponseEntity<String>> publishMessage(@Valid @RequestBody NatsPublishDto publishDto) {
+    public CompletableFuture<ResponseEntity<NatsPublishResponse>> publishMessage(@Valid @RequestBody NatsPublishDto publishDto) {
         log.info("Received NATS publish request - Subject: {}", publishDto.getSubject());
         
         NatsPublishRequest request = new NatsPublishRequest();
@@ -53,10 +53,24 @@ public class NatsController {
         request.setPayload(publishDto.getPayload());
         
         return orchestrationService.publishMessageWithTracking(request)
-                .thenApply(result -> ResponseEntity.ok("Message published successfully"))
+                .thenApply(result -> {
+                    NatsPublishResponse response = new NatsPublishResponse();
+                    response.setRequestId(result);
+                    response.setStatus("PUBLISHED");
+                    response.setMessage("Message published successfully, use trackingUrl to check status");
+                    response.setSubject(publishDto.getSubject());
+                    response.setTrackingUrl("/api/nats/status/" + result);
+                    response.setTimestamp(java.time.Instant.now().toString());
+                    return ResponseEntity.ok(response);
+                })
                 .exceptionally(throwable -> {
                     log.error("Failed to publish message", throwable);
-                    return ResponseEntity.status(500).body("Failed to publish message: " + throwable.getMessage());
+                    NatsPublishResponse response = new NatsPublishResponse();
+                    response.setStatus("FAILED");
+                    response.setMessage("Failed to publish message: " + throwable.getMessage());
+                    response.setSubject(publishDto.getSubject());
+                    response.setTimestamp(java.time.Instant.now().toString());
+                    return ResponseEntity.status(500).body(response);
                 });
     }
 
@@ -162,6 +176,16 @@ public class NatsController {
         
         @NotNull(message = "Payload is required")
         private Object payload;
+    }
+    
+    @Data
+    public static class NatsPublishResponse {
+        private String requestId;
+        private String status; // PUBLISHED, FAILED
+        private String message;
+        private String subject;
+        private String trackingUrl;
+        private String timestamp;
     }
 
     @Data

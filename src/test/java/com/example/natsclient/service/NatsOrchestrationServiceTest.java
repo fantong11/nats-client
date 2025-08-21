@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -44,7 +45,7 @@ class NatsOrchestrationServiceTest {
     private final String testResponse = "{\"status\":\"success\"}";
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         testRequest = new NatsOrchestrationService.NatsRequest();
         testRequest.setSubject(testSubject);
         testRequest.setPayload(testPayload);
@@ -57,6 +58,10 @@ class NatsOrchestrationServiceTest {
     @Test
     void sendRequestWithTracking_Success_ShouldReturnSuccessfulResponse() throws Exception {
         // Arrange
+        Map<String, Object> parsedResponse = Map.of("status", "success");
+        when(objectMapper.readValue(eq(testResponse), eq(Object.class)))
+            .thenReturn(parsedResponse);
+            
         CompletableFuture<String> natsResponseFuture = CompletableFuture.completedFuture(testResponse);
         when(natsClientService.sendRequest(eq(testSubject), eq(testPayload), anyString()))
                 .thenReturn(natsResponseFuture);
@@ -71,7 +76,11 @@ class NatsOrchestrationServiceTest {
         
         assertTrue(response.isSuccess());
         assertEquals(testSubject, response.getSubject());
-        assertEquals(testResponse, response.getResponsePayload());
+        
+        // Response payload should now be a parsed Map object
+        Map<String, Object> expectedPayload = Map.of("status", "success");
+        assertEquals(expectedPayload, response.getResponsePayload());
+        
         assertNotNull(response.getCorrelationId());
         assertNotNull(response.getTimestamp());
         assertNull(response.getErrorMessage());
@@ -160,11 +169,12 @@ class NatsOrchestrationServiceTest {
                 .thenReturn(publishFuture);
 
         // Act
-        CompletableFuture<Void> result = orchestrationService.publishMessageWithTracking(testPublishRequest);
+        CompletableFuture<String> result = orchestrationService.publishMessageWithTracking(testPublishRequest);
 
         // Assert
         assertNotNull(result);
-        assertDoesNotThrow(() -> result.get());
+        String requestId = assertDoesNotThrow(() -> result.get());
+        assertNotNull(requestId);
 
         verify(natsClientService).publishMessage(eq(testSubject), eq(testPayload));
     }
@@ -180,7 +190,7 @@ class NatsOrchestrationServiceTest {
                 .thenReturn(failedFuture);
 
         // Act
-        CompletableFuture<Void> result = orchestrationService.publishMessageWithTracking(testPublishRequest);
+        CompletableFuture<String> result = orchestrationService.publishMessageWithTracking(testPublishRequest);
 
         // Assert
         assertNotNull(result);

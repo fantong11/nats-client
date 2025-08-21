@@ -51,13 +51,22 @@ public class NatsOrchestrationService {
                 result.setCorrelationId(correlationId);
                 result.setSubject(request.getSubject());
                 result.setSuccess(response != null);
-                result.setResponsePayload(response);
-                result.setTimestamp(LocalDateTime.now());
                 
-                if (response == null) {
+                // 嘗試將 JSON 字串解析為物件
+                if (response != null) {
+                    try {
+                        Object jsonObject = objectMapper.readValue(response, Object.class);
+                        result.setResponsePayload(jsonObject);
+                    } catch (Exception e) {
+                        // 如果不是有效的 JSON，就直接返回字串
+                        result.setResponsePayload(response);
+                        log.debug("Response is not valid JSON, returning as string: {}", e.getMessage());
+                    }
+                } else {
                     result.setErrorMessage("No response received");
                 }
                 
+                result.setTimestamp(LocalDateTime.now());
                 return result;
             }).exceptionally(throwable -> {
                 log.error("Error processing NATS request", throwable);
@@ -88,18 +97,24 @@ public class NatsOrchestrationService {
         }
     }
 
-    public CompletableFuture<Void> publishMessageWithTracking(NatsPublishRequest request) {
+    public CompletableFuture<String> publishMessageWithTracking(NatsPublishRequest request) {
         log.info("Publishing NATS message - Subject: {}", request.getSubject());
 
         try {
             validatePublishRequest(request);
             
-            return natsClientService.publishMessage(request.getSubject(), request.getPayload());
+            return natsClientService.publishMessage(request.getSubject(), request.getPayload())
+                .thenApply(result -> {
+                    // 生成並返回請求ID
+                    String requestId = UUID.randomUUID().toString();
+                    log.info("Message published successfully with request ID: {}", requestId);
+                    return requestId;
+                });
 
         } catch (Exception e) {
             log.error("Failed to publish NATS message", e);
             
-            CompletableFuture<Void> errorFuture = new CompletableFuture<>();
+            CompletableFuture<String> errorFuture = new CompletableFuture<>();
             errorFuture.completeExceptionally(new NatsClientException(
                 "Failed to publish message: " + e.getMessage(),
                 e,
@@ -278,7 +293,7 @@ public class NatsOrchestrationService {
         private String correlationId;
         private String subject;
         private boolean success;
-        private String responsePayload;
+        private Object responsePayload;
         private String errorMessage;
         private LocalDateTime timestamp;
     }

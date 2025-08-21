@@ -36,9 +36,18 @@ public class NatsConfig {
         
         Options.Builder optionsBuilder = new Options.Builder()
                 .server(natsUrl)
+                .connectionName(natsProperties.getConnectionName())
                 .connectionTimeout(Duration.ofMillis(natsProperties.getConnection().getTimeout()))
                 .reconnectWait(Duration.ofMillis(natsProperties.getConnection().getReconnect().getWait()))
-                .maxReconnects(-1);  // 改進：無限重連，防止永久失敗
+                .maxReconnects(natsProperties.getConnection().getReconnect().getMaxAttempts())
+                .pingInterval(Duration.ofMillis(natsProperties.getConnection().getPingInterval()))
+                .requestCleanupInterval(Duration.ofMillis(natsProperties.getConnection().getRequestCleanupInterval()))
+                .maxControlLine(natsProperties.getConnection().getMaxControlLine());
+        
+        // 條件性設定 noEcho
+        if (natsProperties.getConnection().isNoEcho()) {
+            optionsBuilder.noEcho();
+        }
         
         // 優先使用Vault/K8s credentials，然後才使用properties配置
         if (vaultCredentials.hasUserPassword()) {
@@ -63,28 +72,37 @@ public class NatsConfig {
         
         Options options = optionsBuilder
                 .connectionListener((conn, type) -> {
-                    log.info("NATS connection event: {}", type);
+                    if (natsProperties.getLogging().isEnableConnectionEvents()) {
+                        log.info("NATS connection event: {}", type);
+                    }
                 })
                 .errorListener(new io.nats.client.ErrorListener() {
                     @Override
                     public void errorOccurred(Connection conn, String error) {
-                        log.error("NATS connection error: {}", error);
+                        if (natsProperties.getLogging().isEnableErrorLogging()) {
+                            log.error("NATS connection error: {}", error);
+                        }
                     }
 
                     @Override
                     public void exceptionOccurred(Connection conn, Exception exp) {
-                        log.error("NATS connection exception", exp);
+                        if (natsProperties.getLogging().isEnableErrorLogging()) {
+                            log.error("NATS connection exception", exp);
+                        }
                     }
 
                     @Override
                     public void slowConsumerDetected(Connection conn, io.nats.client.Consumer consumer) {
-                        log.warn("NATS slow consumer detected: {}", consumer.toString());
+                        if (natsProperties.getLogging().isEnableSlowConsumerWarning()) {
+                            log.warn("NATS slow consumer detected: {}", consumer.toString());
+                        }
                     }
                 })
                 .build();
 
         Connection connection = Nats.connect(options);
-        log.info("Connected to NATS server: {} [Enhanced with unlimited reconnection]", natsUrl);
+        log.info("Connected to NATS server: {} with connection name: '{}' [Enhanced with unlimited reconnection]", 
+                natsUrl, natsProperties.getConnectionName());
         return connection;
     }
 }
