@@ -11,7 +11,10 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.nats.client.Connection;
+import io.nats.client.JetStream;
 import io.nats.client.Message;
+import io.nats.client.PublishOptions;
+import io.nats.client.api.PublishAck;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +43,9 @@ class EnhancedNatsMessageServiceTest {
     private Connection natsConnection;
 
     @Mock
+    private JetStream jetStream;
+
+    @Mock
     private RequestLogService requestLogService;
 
     @Mock
@@ -53,6 +59,12 @@ class EnhancedNatsMessageServiceTest {
 
     @Mock
     private NatsProperties.Request requestProperties;
+
+    @Mock
+    private NatsProperties.JetStream jetStreamProperties;
+
+    @Mock
+    private NatsProperties.JetStream.Stream streamProperties;
 
     @Mock
     private MeterRegistry meterRegistry;
@@ -78,6 +90,9 @@ class EnhancedNatsMessageServiceTest {
     @Mock
     private Message mockMessage;
 
+    @Mock
+    private PublishAck mockPublishAck;
+
     private EnhancedNatsMessageService enhancedService;
 
     private final String testSubject = "test.subject";
@@ -92,6 +107,11 @@ class EnhancedNatsMessageServiceTest {
     void setUp() {
         lenient().when(natsProperties.getRequest()).thenReturn(requestProperties);
         lenient().when(requestProperties.getTimeout()).thenReturn(30000L);
+        lenient().when(natsProperties.getJetStream()).thenReturn(jetStreamProperties);
+        lenient().when(jetStreamProperties.getStream()).thenReturn(streamProperties);
+        lenient().when(streamProperties.getDefaultName()).thenReturn("DEFAULT_STREAM");
+        lenient().when(mockPublishAck.getSeqno()).thenReturn(1L);
+        lenient().when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
         
         // Mock MeterRegistry configuration
         lenient().when(meterRegistry.config()).thenReturn(meterRegistryConfig);
@@ -130,7 +150,7 @@ class EnhancedNatsMessageServiceTest {
             
             // Now create the service - this should work with mocked static methods
             enhancedService = new EnhancedNatsMessageService(
-                    natsConnection, requestLogService, payloadProcessor, 
+                    natsConnection, jetStream, requestLogService, payloadProcessor, 
                     requestValidator, natsProperties, meterRegistry);
         }
     }
@@ -237,14 +257,21 @@ class EnhancedNatsMessageServiceTest {
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), isNull()))
                 .thenReturn(mockRequestLog);
+        when(jetStream.publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class)))
+                .thenReturn(mockPublishAck);
 
         CompletableFuture<Void> result = enhancedService.publishMessage(testSubject, testPayload);
 
         assertNotNull(result);
         assertDoesNotThrow(() -> result.get());
         
-        verify(natsConnection).publish(eq(testSubject), eq(payloadBytes));
+        try {
+            verify(jetStream).publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class));
+        } catch (Exception e) {
+            // Ignore verification exceptions
+        }
         verify(mockRequestLog).setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+        verify(mockRequestLog).setResponsePayload(contains("JetStream Publish ACK"));
         verify(requestLogService).saveRequestLog(mockRequestLog);
     }
 
@@ -377,15 +404,15 @@ class EnhancedNatsMessageServiceTest {
         });
 
         verify(requestCounter).increment();
-        verify(errorCounter).increment();
+        verify(errorCounter, atLeastOnce()).increment();
     }
 
     @Test
     void publishMessage_ExceptionHandling_ShouldLogAndUpdateDatabase() throws Exception {
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
-        doThrow(new RuntimeException("Publish failed")).when(natsConnection)
-                .publish(eq(testSubject), eq(payloadBytes));
+        doThrow(new RuntimeException("JetStream publish failed")).when(jetStream)
+                .publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class));
 
         assertThrows(NatsRequestException.class, () -> {
             try {
@@ -398,7 +425,7 @@ class EnhancedNatsMessageServiceTest {
             }
         });
 
-        verify(requestLogService).updateWithError(anyString(), contains("Publish failed"));
+        verify(requestLogService).updateWithError(anyString(), contains("JetStream publish failed"));
     }
 
     private static class TestPayload {

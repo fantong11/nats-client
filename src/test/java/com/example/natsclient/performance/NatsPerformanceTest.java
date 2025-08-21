@@ -8,7 +8,10 @@ import com.example.natsclient.service.impl.EnhancedNatsMessageService;
 import com.example.natsclient.service.validator.RequestValidator;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.nats.client.Connection;
+import io.nats.client.JetStream;
 import io.nats.client.Message;
+import io.nats.client.PublishOptions;
+import io.nats.client.api.PublishAck;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +40,12 @@ class NatsPerformanceTest {
     private Connection natsConnection;
 
     @Mock
+    private JetStream jetStream;
+
+    @Mock
+    private PublishAck mockPublishAck;
+
+    @Mock
     private RequestLogService requestLogService;
 
     @Mock
@@ -50,6 +59,12 @@ class NatsPerformanceTest {
 
     @Mock
     private NatsProperties.Request requestProperties;
+
+    @Mock
+    private NatsProperties.JetStream jetStreamProperties;
+
+    @Mock
+    private NatsProperties.JetStream.Stream streamProperties;
 
     @Mock
     private MeterRegistry meterRegistry;
@@ -70,12 +85,17 @@ class NatsPerformanceTest {
     void setUp() {
         when(natsProperties.getRequest()).thenReturn(requestProperties);
         when(requestProperties.getTimeout()).thenReturn(30000L);
+        when(natsProperties.getJetStream()).thenReturn(jetStreamProperties);
+        when(jetStreamProperties.getStream()).thenReturn(streamProperties);
+        when(streamProperties.getDefaultName()).thenReturn("DEFAULT_STREAM");
+        when(mockPublishAck.getSeqno()).thenReturn(1L);
+        when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
         
         when(meterRegistry.counter(anyString())).thenReturn(mock(io.micrometer.core.instrument.Counter.class));
         when(meterRegistry.timer(anyString())).thenReturn(mock(io.micrometer.core.instrument.Timer.class));
         
         natsService = new EnhancedNatsMessageService(
-                natsConnection, requestLogService, payloadProcessor, 
+                natsConnection, jetStream, requestLogService, payloadProcessor, 
                 requestValidator, natsProperties, meterRegistry);
 
         when(payloadProcessor.serialize(any())).thenReturn(serializedPayload);
@@ -86,8 +106,12 @@ class NatsPerformanceTest {
         try {
             when(natsConnection.request(anyString(), any(byte[].class), any(Duration.class)))
                     .thenReturn(mockMessage);
+            when(jetStream.publish(anyString(), any(byte[].class), any(PublishOptions.class)))
+                    .thenReturn(mockPublishAck);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            // Ignore for test setup
         }
         when(mockMessage.getData()).thenReturn(responseBytes);
         

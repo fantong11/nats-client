@@ -1,0 +1,88 @@
+# NATS API 測試腳本 (JetStream 底層實現)
+# 原有的 API 端點，但底層使用 JetStream 提供可靠性
+
+### 1. 健康檢查
+GET http://localhost:8080/actuator/health
+Accept: application/json
+
+###
+
+### 2. 發布訊息 (使用 JetStream)
+POST http://localhost:8080/api/nats/publish
+Content-Type: application/json
+
+{
+  "subject": "test.publish",
+  "payload": {
+    "message": "Hello from JetStream (透過原有 API)",
+    "timestamp": "2025-08-21T18:00:00Z",
+    "metadata": {
+      "source": "http-test",
+      "version": "2.0-jetstream"
+    }
+  }
+}
+
+###
+
+### 3. 請求/回應測試 (使用 JetStream)
+POST http://localhost:8080/api/nats/request
+Content-Type: application/json
+
+{
+  "subject": "test.echo",
+  "payload": {
+    "message": "Echo Test with JetStream reliability",
+    "requestId": "jetstream-test-001",
+    "timestamp": "2025-08-21T18:00:00Z"
+  }
+}
+
+###
+
+### 4. 回聲測試
+POST http://localhost:8080/api/nats/test/echo
+Content-Type: application/json
+
+{
+  "message": "Test message with JetStream backend",
+  "metadata": "Integration test"
+}
+
+###
+
+### 5. 統計資訊
+GET http://localhost:8080/api/nats/statistics
+Accept: application/json
+
+###
+
+### 6. 超時測試
+POST http://localhost:8080/api/nats/test/timeout
+Content-Type: application/json
+
+###
+
+### 7. 錯誤測試
+POST http://localhost:8080/api/nats/test/error
+Content-Type: application/json
+
+###
+
+### 8. 檢查請求狀態
+GET http://localhost:8080/api/nats/status/{{requestId}}
+Accept: application/json
+
+###
+
+### 測試說明：
+# - 所有 API 端點保持不變，但底層改用 JetStream 實現
+# - JetStream 提供 at-least-once delivery 和持久化保證
+# - publish 操作會有 PublishAck 但在日誌中記錄，API 回應格式不變
+# - 更好的可靠性和錯誤處理
+# - 完全向後兼容原有的 API
+
+### 注意事項：
+# 1. NATS Server 必須啟用 JetStream (--jetstream)
+# 2. 會自動創建預設 stream "DEFAULT_STREAM"
+# 3. JetStream 需要更多記憶體資源

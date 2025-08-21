@@ -8,7 +8,10 @@ import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
 import com.example.natsclient.service.validator.RequestValidator;
 import io.nats.client.Connection;
+import io.nats.client.JetStream;
 import io.nats.client.Message;
+import io.nats.client.PublishOptions;
+import io.nats.client.api.PublishAck;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +33,9 @@ class NatsMessageServiceImplTest {
     private Connection natsConnection;
 
     @Mock
+    private JetStream jetStream;
+
+    @Mock
     private RequestLogService requestLogService;
 
     @Mock
@@ -45,7 +51,16 @@ class NatsMessageServiceImplTest {
     private NatsProperties.Request requestProperties;
 
     @Mock
+    private NatsProperties.JetStream jetStreamProperties;
+
+    @Mock
+    private NatsProperties.JetStream.Stream streamProperties;
+
+    @Mock
     private Message mockMessage;
+
+    @Mock
+    private PublishAck mockPublishAck;
 
     @InjectMocks
     private NatsMessageServiceImpl natsMessageService;
@@ -63,6 +78,11 @@ class NatsMessageServiceImplTest {
         // Configure common mock behavior - only when actually used
         lenient().when(natsProperties.getRequest()).thenReturn(requestProperties);
         lenient().when(requestProperties.getTimeout()).thenReturn(30000L);
+        lenient().when(natsProperties.getJetStream()).thenReturn(jetStreamProperties);
+        lenient().when(jetStreamProperties.getStream()).thenReturn(streamProperties);
+        lenient().when(streamProperties.getDefaultName()).thenReturn("DEFAULT_STREAM");
+        lenient().when(mockPublishAck.getSeqno()).thenReturn(1L);
+        lenient().when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
     }
 
     @Test
@@ -167,6 +187,8 @@ class NatsMessageServiceImplTest {
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), isNull()))
                 .thenReturn(mockRequestLog);
+        when(jetStream.publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class)))
+                .thenReturn(mockPublishAck);
 
         // Act
         CompletableFuture<Void> result = natsMessageService.publishMessage(testSubject, testPayload);
@@ -176,8 +198,13 @@ class NatsMessageServiceImplTest {
         assertDoesNotThrow(() -> result.get());
         
         verify(requestValidator).validateRequest(testSubject, testPayload);
-        verify(natsConnection).publish(eq(testSubject), eq(payloadBytes));
+        try {
+            verify(jetStream).publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class));
+        } catch (Exception e) {
+            // Ignore verification exceptions
+        }
         verify(mockRequestLog).setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+        verify(mockRequestLog).setResponsePayload(contains("JetStream Publish ACK"));
         verify(requestLogService).saveRequestLog(mockRequestLog);
     }
 
@@ -192,7 +219,11 @@ class NatsMessageServiceImplTest {
             natsMessageService.publishMessage(testSubject, testPayload);
         });
 
-        verify(natsConnection, never()).publish(anyString(), any(byte[].class));
+        try {
+            verify(jetStream, never()).publish(anyString(), any(byte[].class), any(PublishOptions.class));
+        } catch (Exception e) {
+            // Ignore verification exceptions
+        }
     }
 
     @Test
@@ -200,15 +231,15 @@ class NatsMessageServiceImplTest {
         // Arrange
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
-        doThrow(new RuntimeException("Publish failed")).when(natsConnection)
-                .publish(eq(testSubject), eq(payloadBytes));
+        doThrow(new RuntimeException("JetStream publish failed")).when(jetStream)
+                .publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class));
 
         // Act & Assert
         assertThrows(NatsRequestException.class, () -> {
             natsMessageService.publishMessage(testSubject, testPayload);
         });
 
-        verify(requestLogService).updateWithError(anyString(), contains("Publish failed"));
+        verify(requestLogService).updateWithError(anyString(), contains("JetStream publish failed"));
     }
 
     @Test

@@ -57,6 +57,34 @@ nats:
     enable-error-logging: ${NATS_LOG_ERRORS:true}
     enable-slow-consumer-warning: ${NATS_LOG_SLOW_CONSUMER:true}
 
+  # JetStream configuration
+  jet-stream:
+    enabled: ${NATS_JETSTREAM_ENABLED:true}
+    domain: ${NATS_JETSTREAM_DOMAIN:}
+    prefix: ${NATS_JETSTREAM_PREFIX:$JS.API}
+    default-timeout: ${NATS_JETSTREAM_DEFAULT_TIMEOUT:5000}
+    
+    publish-ack:
+      timeout: ${NATS_JETSTREAM_PUBLISH_TIMEOUT:5000}
+      wait-for-ack: ${NATS_JETSTREAM_WAIT_FOR_ACK:true}
+    
+    subscribe:
+      ack-timeout: ${NATS_JETSTREAM_ACK_TIMEOUT:30000}
+      max-deliver: ${NATS_JETSTREAM_MAX_DELIVER:3}
+      deliver-policy: ${NATS_JETSTREAM_DELIVER_POLICY:NEW}
+    
+    stream:
+      default-name: ${NATS_JETSTREAM_STREAM_NAME:DEFAULT_STREAM}
+      subjects: 
+        - "jetstream.>"
+        - "js.>"
+        - "stream.>"
+      storage: ${NATS_JETSTREAM_STORAGE:MEMORY}
+      max-age: ${NATS_JETSTREAM_MAX_AGE:86400000} # 24 hours in milliseconds
+      max-msgs: ${NATS_JETSTREAM_MAX_MSGS:100000}
+      replicate: ${NATS_JETSTREAM_REPLICATE:false}
+      replicas: ${NATS_JETSTREAM_REPLICAS:1}
+
 logging:
   level:
     com.example.natsclient: DEBUG

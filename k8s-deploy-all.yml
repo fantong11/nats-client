@@ -13,7 +13,7 @@ spec:
     requests:
       storage: 10Gi
 ---
-# NATS Server Deployment
+# NATS Server Deployment with JetStream
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -45,6 +45,11 @@ spec:
         - "nats-server"
         - "--log"
         - "/dev/stdout"
+        - "--jetstream"
+        - "--store_dir=/nats/jetstream"
+        volumeMounts:
+        - name: jetstream-storage
+          mountPath: /nats/jetstream
         resources:
           requests:
             memory: "128Mi"
@@ -67,6 +72,9 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
           timeoutSeconds: 5
+      volumes:
+      - name: jetstream-storage
+        emptyDir: {}
 ---
 # NATS Server Service
 apiVersion: v1
@@ -207,6 +215,12 @@ spec:
           value: "system"
         - name: SPRING_DATASOURCE_PASSWORD
           value: "oracle123"
+        - name: NATS_JETSTREAM_ENABLED
+          value: "true"
+        - name: NATS_JETSTREAM_STREAM_NAME
+          value: "K8S_STREAM"
+        - name: NATS_JETSTREAM_STORAGE
+          value: "MEMORY"
         resources:
           requests:
             memory: "512Mi"

@@ -151,26 +151,26 @@ test_application() {
         log_warning "健康檢查失敗"
     fi
     
-    # 測試 Publish API
-    log_info "測試 Publish API..."
+    # 測試 Publish API (JetStream 底層)
+    log_info "測試 Publish API (JetStream 底層實現)..."
     PUBLISH_RESULT=$(kubectl exec $POD_NAME -- curl -s -X POST http://localhost:8080/api/nats/publish \
         -H "Content-Type: application/json" \
-        -d '{"subject": "test.publish", "payload": {"message": "Hello from K8s script", "timestamp": "'$(date -Iseconds)'"}}')
+        -d '{"subject": "test.publish", "payload": {"message": "Hello JetStream from K8s script", "timestamp": "'$(date -Iseconds)'"}}')
     
     if echo "$PUBLISH_RESULT" | grep -q "PUBLISHED"; then
-        log_success "Publish API 測試通過"
+        log_success "Publish API 測試通過 (JetStream 底層)"
     else
         log_warning "Publish API 測試失敗: $PUBLISH_RESULT"
     fi
     
-    # 測試 Request API (使用 test.echo subject)
-    log_info "測試 Request API..."
+    # 測試 Request API (JetStream 底層)
+    log_info "測試 Request API (JetStream 底層實現)..."
     REQUEST_RESULT=$(kubectl exec $POD_NAME -- curl -s -X POST http://localhost:8080/api/nats/request \
         -H "Content-Type: application/json" \
-        -d '{"subject": "test.echo", "payload": {"message": "Hello Echo from K8s script", "requestId": "script-test-001"}}')
+        -d '{"subject": "test.echo", "payload": {"message": "Hello Echo with JetStream from K8s script", "requestId": "script-test-001"}}')
     
     if echo "$REQUEST_RESULT" | grep -q '"success":true'; then
-        log_success "Request API 測試通過"
+        log_success "Request API 測試通過 (JetStream 底層)"
         echo "回應: $(echo "$REQUEST_RESULT" | jq -r '.responsePayload' 2>/dev/null || echo "$REQUEST_RESULT")"
     else
         log_warning "Request API 測試結果: $REQUEST_RESULT"

@@ -12,7 +12,10 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.nats.client.Connection;
+import io.nats.client.JetStream;
 import io.nats.client.Message;
+import io.nats.client.PublishOptions;
+import io.nats.client.api.PublishAck;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -51,6 +54,7 @@ public class EnhancedNatsMessageService implements NatsMessageService {
     private final Timer requestTimer;
     
     private final Connection natsConnection;
+    private final JetStream jetStream;
     private final RequestLogService requestLogService;
     private final PayloadProcessor payloadProcessor;
     private final RequestValidator requestValidator;
@@ -59,12 +63,14 @@ public class EnhancedNatsMessageService implements NatsMessageService {
     @Autowired
     public EnhancedNatsMessageService(
             Connection natsConnection,
+            JetStream jetStream,
             RequestLogService requestLogService,
             PayloadProcessor payloadProcessor,
             RequestValidator requestValidator,
             NatsProperties natsProperties,
             MeterRegistry meterRegistry) {
         this.natsConnection = natsConnection;
+        this.jetStream = jetStream;
         this.requestLogService = requestLogService;
         this.payloadProcessor = payloadProcessor;
         this.requestValidator = requestValidator;
@@ -226,33 +232,39 @@ public class EnhancedNatsMessageService implements NatsMessageService {
         
         MDC.put("requestId", requestId);
         MDC.put("subject", subject);
-        MDC.put("operation", "publish");
+        MDC.put("operation", "jetstream_publish");
         
         try {
             requestValidator.validateRequest(subject, messagePayload);
             
             String jsonPayload = payloadProcessor.serialize(messagePayload);
-            byte[] payloadBytes = payloadProcessor.toBytes(jsonPayload);
             
-            natsConnection.publish(subject, payloadBytes);
+            // Use JetStream for reliable message publishing
+            PublishOptions publishOptions = PublishOptions.builder()
+                    .expectedStream(natsProperties.getJetStream().getStream().getDefaultName())
+                    .build();
+            
+            PublishAck publishAck = jetStream.publish(subject, payloadProcessor.toBytes(jsonPayload), publishOptions);
             
             NatsRequestLog requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, null);
             requestLog.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+            requestLog.setResponsePayload("JetStream Publish ACK - Sequence: " + publishAck.getSeqno() + 
+                                        ", Stream: " + publishAck.getStream());
             requestLogService.saveRequestLog(requestLog);
             
             long duration = Duration.between(startTime, Instant.now()).toMillis();
-            logger.info("Message published successfully in {}ms", duration);
+            logger.info("JetStream message published successfully in {}ms - Sequence: {}", duration, publishAck.getSeqno());
             
             return CompletableFuture.completedFuture(null);
             
         } catch (Exception e) {
             long duration = Duration.between(startTime, Instant.now()).toMillis();
-            logger.error("Failed to publish message after {}ms", duration, e);
+            logger.error("Failed to publish JetStream message after {}ms", duration, e);
             
-            requestLogService.updateWithError(requestId, "Error publishing message: " + e.getMessage());
+            requestLogService.updateWithError(requestId, "Error publishing JetStream message: " + e.getMessage());
             
             CompletableFuture<Void> future = new CompletableFuture<>();
-            future.completeExceptionally(new NatsRequestException("Failed to publish NATS message", requestId, e));
+            future.completeExceptionally(new NatsRequestException("Failed to publish JetStream message", requestId, e));
             return future;
         } finally {
             MDC.clear();

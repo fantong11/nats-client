@@ -19,6 +19,7 @@ public class NatsProperties {
     private Request request = new Request();
     private Tls tls = new Tls();
     private Logging logging = new Logging();
+    private JetStream jetStream = new JetStream();
 
     @Data
     public static class Connection {
@@ -55,6 +56,41 @@ public class NatsProperties {
         private boolean enableConnectionEvents = true;
         private boolean enableErrorLogging = true;
         private boolean enableSlowConsumerWarning = true;
+    }
+
+    @Data
+    public static class JetStream {
+        private boolean enabled = true;
+        private String domain;
+        private String prefix = "$JS.API";
+        private long defaultTimeout = 5000;
+        private PublishAck publishAck = new PublishAck();
+        private Subscribe subscribe = new Subscribe();
+        private Stream stream = new Stream();
+
+        @Data
+        public static class PublishAck {
+            private long timeout = 5000;
+            private boolean waitForAck = true;
+        }
+
+        @Data
+        public static class Subscribe {
+            private long ackTimeout = 30000;
+            private int maxDeliver = 3;
+            private String deliverPolicy = "NEW";
+        }
+
+        @Data
+        public static class Stream {
+            private String defaultName = "DEFAULT_STREAM";
+            private String[] subjects = {"*"};
+            private String storage = "MEMORY";
+            private long maxAge = 86400000; // 24 hours
+            private int maxMsgs = 100000;
+            private boolean replicate = false;
+            private int replicas = 1;
+        }
     }
 
 }

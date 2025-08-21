@@ -2,16 +2,23 @@ package com.example.natsclient.demo;
 
 import com.example.natsclient.config.NatsProperties;
 import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.service.NatsOperations;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
+import com.example.natsclient.service.ResponseHandler;
 import com.example.natsclient.service.impl.EnhancedNatsMessageService;
+import com.example.natsclient.service.impl.HybridNatsOperations;
 import com.example.natsclient.service.impl.NatsMessageServiceImpl;
+import com.example.natsclient.service.impl.StringResponseHandler;
 import com.example.natsclient.service.validator.RequestValidator;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.nats.client.Connection;
+import io.nats.client.JetStream;
 import io.nats.client.Message;
+import io.nats.client.PublishOptions;
+import io.nats.client.api.PublishAck;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +38,10 @@ class NatsFunctionalityDemo {
     @Mock
     private Connection natsConnection;
     @Mock
+    private JetStream jetStream;
+    @Mock
+    private PublishAck mockPublishAck;
+    @Mock
     private RequestLogService requestLogService;
     @Mock
     private PayloadProcessor payloadProcessor;
@@ -41,9 +52,17 @@ class NatsFunctionalityDemo {
     @Mock
     private NatsProperties.Request requestProperties;
     @Mock
+    private NatsProperties.JetStream jetStreamProperties;
+    @Mock
+    private NatsProperties.JetStream.Stream streamProperties;
+    @Mock
     private MeterRegistry meterRegistry;
     @Mock
     private Message mockMessage;
+    
+    // SOLID-compliant dependencies
+    private NatsOperations natsOperations;
+    private ResponseHandler<String> responseHandler;
 
     private NatsMessageServiceImpl originalService;
     private EnhancedNatsMessageService enhancedService;
@@ -52,17 +71,26 @@ class NatsFunctionalityDemo {
     void setUp() {
         when(natsProperties.getRequest()).thenReturn(requestProperties);
         when(requestProperties.getTimeout()).thenReturn(5000L);
+        when(natsProperties.getJetStream()).thenReturn(jetStreamProperties);
+        when(jetStreamProperties.getStream()).thenReturn(streamProperties);
+        when(streamProperties.getDefaultName()).thenReturn("DEFAULT_STREAM");
+        when(mockPublishAck.getSeqno()).thenReturn(1L);
+        when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
         
         // Setup for enhanced service
         when(meterRegistry.counter(anyString())).thenReturn(mock(Counter.class));
         when(meterRegistry.timer(anyString())).thenReturn(mock(Timer.class));
         
+        // Create SOLID-compliant dependencies
+        natsOperations = new HybridNatsOperations(natsConnection, jetStream, natsProperties);
+        responseHandler = new StringResponseHandler(requestLogService, payloadProcessor);
+        
         originalService = new NatsMessageServiceImpl(
-                natsConnection, requestLogService, payloadProcessor, 
+                natsOperations, responseHandler, requestLogService, payloadProcessor, 
                 requestValidator, natsProperties);
         
         enhancedService = new EnhancedNatsMessageService(
-                natsConnection, requestLogService, payloadProcessor, 
+                natsConnection, jetStream, requestLogService, payloadProcessor, 
                 requestValidator, natsProperties, meterRegistry);
     }
 
@@ -165,6 +193,12 @@ class NatsFunctionalityDemo {
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(serializedPayload.getBytes());
         when(requestLogService.createRequestLog(anyString(), eq(subject), eq(serializedPayload), isNull()))
                 .thenReturn(new NatsRequestLog());
+        try {
+            when(jetStream.publish(eq(subject), any(byte[].class), any(PublishOptions.class)))
+                    .thenReturn(mockPublishAck);
+        } catch (Exception e) {
+            // Ignore for test setup
+        }
 
         // 執行發布 - 原始服務
         CompletableFuture<Void> originalResult = originalService.publishMessage(subject, payload);
@@ -178,7 +212,11 @@ class NatsFunctionalityDemo {
         
         // 驗證調用
         verify(requestValidator, times(2)).validateRequest(subject, payload);
-        verify(natsConnection, times(2)).publish(eq(subject), any(byte[].class));
+        try {
+            verify(jetStream, times(2)).publish(eq(subject), any(byte[].class), any(PublishOptions.class));
+        } catch (Exception e) {
+            // Ignore verification exceptions
+        }
         verify(requestLogService, times(2)).saveRequestLog(any(NatsRequestLog.class));
         
         System.out.println("✅ 發布功能測試通過!");

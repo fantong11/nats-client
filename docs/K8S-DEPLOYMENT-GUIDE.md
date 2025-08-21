@@ -1,6 +1,6 @@
-# Kubernetes 部署實戰指南
+# Kubernetes 部署實戰指南 (JetStream 版本)
 
-本指南記錄了 NATS Client Service 在 Kubernetes 環境中的實際部署、測試流程和最佳實踐。
+本指南記錄了 NATS Client Service 在 Kubernetes 環境中的實際部署、測試流程和最佳實踐。此版本包含完整的 JetStream 支援，提供持久化訊息存儲和增強的可靠性。
 
 ## 📋 目錄
 
@@ -8,6 +8,7 @@
 - [構建 Docker 鏡像](#構建-docker-鏡像)
 - [部署到 Kubernetes](#部署到-kubernetes)
 - [服務測試](#服務測試)
+- [JetStream 功能測試](#jetstream-功能測試)
 - [故障排除](#故障排除)
 - [清理環境](#清理環境)
 
@@ -239,6 +240,118 @@ kubectl top pods
 # 查看應用統計資訊
 kubectl exec deployment/nats-client-app -- \
 curl http://localhost:8080/api/nats/statistics
+```
+
+## 🚀 JetStream 功能測試
+
+### 1. JetStream 發布測試
+```bash
+# 測試 JetStream 發布功能
+kubectl exec deployment/nats-client-app -- \
+curl -X POST http://localhost:8080/api/nats/jetstream/publish \
+-H "Content-Type: application/json" \
+-d '{
+  "subject": "jetstream.test.publish",
+  "streamName": "K8S_STREAM", 
+  "payload": {
+    "message": "Hello JetStream from K8s",
+    "timestamp": "'$(date -Iseconds)'"
+  }
+}'
+
+# 期望回應包含 PublishAck 資訊:
+# {
+#   "requestId": "uuid-123",
+#   "subject": "jetstream.test.publish",
+#   "streamName": "K8S_STREAM",
+#   "sequenceNumber": 1,
+#   "success": true,
+#   "timestamp": "..."
+# }
+```
+
+### 2. JetStream 請求/回應測試
+```bash
+# 測試 JetStream 增強的請求/回應
+kubectl exec deployment/nats-client-app -- \
+curl -X POST http://localhost:8080/api/nats/jetstream/request \
+-H "Content-Type: application/json" \
+-d '{
+  "subject": "jetstream.test.echo",
+  "payload": {
+    "message": "JetStream Echo Test",
+    "requestId": "js-k8s-test-001"
+  }
+}'
+
+# JetStream 提供更可靠的訊息傳遞保證
+```
+
+### 3. JetStream vs NATS Core 比較測試
+```bash
+# 1. 傳統 NATS Core publish
+kubectl exec deployment/nats-client-app -- \
+curl -X POST http://localhost:8080/api/nats/publish \
+-H "Content-Type: application/json" \
+-d '{"subject": "core.test", "payload": {"message": "NATS Core"}}'
+
+# 2. JetStream publish (提供 ACK 和持久性)
+kubectl exec deployment/nats-client-app -- \
+curl -X POST http://localhost:8080/api/nats/jetstream/publish \
+-H "Content-Type: application/json" \
+-d '{
+  "subject": "jetstream.test", 
+  "streamName": "K8S_STREAM",
+  "payload": {"message": "JetStream with persistence"}
+}'
+
+# 比較回應差異：
+# - NATS Core: 簡單的成功/失敗狀態
+# - JetStream: 包含 sequence number, stream name, 和 ACK 確認
+```
+
+### 4. 檢查 JetStream 狀態
+```bash
+# 檢查 NATS Server JetStream 狀態
+kubectl exec deployment/nats-server -- \
+nats stream list
+
+# 檢查特定 stream 資訊
+kubectl exec deployment/nats-server -- \
+nats stream info K8S_STREAM
+
+# 查看 stream 中的訊息
+kubectl exec deployment/nats-server -- \
+nats stream view K8S_STREAM
+```
+
+### 5. JetStream 效能測試
+```bash
+# 批量發布測試 JetStream 效能
+for i in {1..10}; do
+  kubectl exec deployment/nats-client-app -- \
+  curl -s -X POST http://localhost:8080/api/nats/jetstream/publish \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "jetstream.perf.test",
+    "streamName": "K8S_STREAM",
+    "payload": {"batch": '${i}', "message": "Performance test"}
+  }' &
+done
+wait
+
+echo "JetStream 批量發布完成"
+```
+
+### 6. JetStream 配置驗證
+```bash
+# 檢查應用程式 JetStream 配置
+kubectl exec deployment/nats-client-app -- \
+curl http://localhost:8080/actuator/env | jq '.propertySources[] | select(.name | contains("application")) | .properties | to_entries | map(select(.key | startswith("nats.jet-stream"))) | from_entries'
+
+# 或檢查特定配置
+kubectl exec deployment/nats-client-app -- \
+env | grep NATS_JETSTREAM
 ```
 
 ## 🔍 故障排除
