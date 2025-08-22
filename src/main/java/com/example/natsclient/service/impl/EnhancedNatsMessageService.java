@@ -1,24 +1,16 @@
 package com.example.natsclient.service.impl;
 
 import com.example.natsclient.config.NatsProperties;
-import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.exception.NatsRequestException;
-import com.example.natsclient.exception.NatsTimeoutException;
 import com.example.natsclient.service.NatsMessageService;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
 import com.example.natsclient.service.validator.RequestValidator;
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
 import io.nats.client.Connection;
 import io.nats.client.JetStream;
-import io.nats.client.Message;
-import io.nats.client.PublishOptions;
-import io.nats.client.api.PublishAck;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.retry.annotation.Backoff;
@@ -26,21 +18,16 @@ import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Enhanced NATS Message Service with JetStream support, improved error handling, metrics, and logging.
+ * Enhanced NATS Message Service using Template Method pattern for improved maintainability.
  * 
  * Features:
  * - JetStream-based messaging for durability and reliability
- * - Structured logging with MDC
- * - Metrics collection with Micrometer
+ * - Template Method pattern for consistent processing workflow
+ * - Delegation to specialized processors
  * - Retry mechanism for resilience
- * - Better exception handling
- * - Performance monitoring
  * - Async processing model with JetStream
  */
 @Service
@@ -49,18 +36,8 @@ public class EnhancedNatsMessageService implements NatsMessageService {
     
     private static final Logger logger = LoggerFactory.getLogger(EnhancedNatsMessageService.class);
     
-    // Metrics
-    private final Counter requestCounter;
-    private final Counter successCounter;
-    private final Counter errorCounter;
-    private final Timer requestTimer;
-    
-    private final Connection natsConnection;
-    private final JetStream jetStream;
-    private final RequestLogService requestLogService;
-    private final PayloadProcessor payloadProcessor;
-    private final RequestValidator requestValidator;
-    private final NatsProperties natsProperties;
+    private final NatsRequestProcessor requestProcessor;
+    private final NatsPublishProcessor publishProcessor;
     
     @Autowired
     public EnhancedNatsMessageService(
@@ -71,45 +48,17 @@ public class EnhancedNatsMessageService implements NatsMessageService {
             RequestValidator requestValidator,
             NatsProperties natsProperties,
             MeterRegistry meterRegistry) {
-        this.natsConnection = natsConnection;
-        this.jetStream = jetStream;
-        this.requestLogService = requestLogService;
-        this.payloadProcessor = payloadProcessor;
-        this.requestValidator = requestValidator;
-        this.natsProperties = natsProperties;
         
-        // Initialize metrics
-        this.requestCounter = initializeCounter("nats.requests.total", "Total number of NATS requests", meterRegistry);
-        this.successCounter = initializeCounter("nats.requests.success", "Number of successful NATS requests", meterRegistry);
-        this.errorCounter = initializeCounter("nats.requests.error", "Number of failed NATS requests", meterRegistry);
-        this.requestTimer = initializeTimer("nats.request.duration", "NATS request duration", meterRegistry);
+        // Initialize specialized processors using Template Method pattern
+        this.requestProcessor = new NatsRequestProcessor(
+                jetStream, requestLogService, payloadProcessor, 
+                requestValidator, natsProperties, meterRegistry);
+        
+        this.publishProcessor = new NatsPublishProcessor(
+                jetStream, requestLogService, payloadProcessor,
+                requestValidator, natsProperties, meterRegistry);
     }
     
-    private Counter initializeCounter(String name, String description, MeterRegistry registry) {
-        try {
-            return Counter.builder(name)
-                    .description(description)
-                    .register(registry);
-        } catch (Exception e) {
-            logger.warn("Failed to register counter {}: {}. Using no-op counter.", name, e.getMessage());
-            return Counter.builder(name)
-                    .description(description)
-                    .register(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
-        }
-    }
-    
-    private Timer initializeTimer(String name, String description, MeterRegistry registry) {
-        try {
-            return Timer.builder(name)
-                    .description(description)
-                    .register(registry);
-        } catch (Exception e) {
-            logger.warn("Failed to register timer {}: {}. Using no-op timer.", name, e.getMessage());
-            return Timer.builder(name)
-                    .description(description)
-                    .register(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
-        }
-    }
     
     @Override
     @Async
@@ -119,184 +68,15 @@ public class EnhancedNatsMessageService implements NatsMessageService {
         backoff = @Backoff(delay = 1000, multiplier = 2)
     )
     public CompletableFuture<String> sendRequest(String subject, Object requestPayload, String correlationId) {
-        String requestId = UUID.randomUUID().toString();
-        Instant startTime = Instant.now();
-        
-        // Set up MDC for structured logging
-        MDC.put("requestId", requestId);
-        MDC.put("subject", subject);
-        MDC.put("correlationId", correlationId);
-        
-        try {
-            requestCounter.increment();
-            
-            // Input validation
-            requestValidator.validateRequest(subject, requestPayload);
-            requestValidator.validateCorrelationId(correlationId);
-            
-            logger.info("Starting NATS request processing");
-            
-            return processRequest(requestId, subject, requestPayload, correlationId, startTime);
-                    
-        } catch (Exception e) {
-            errorCounter.increment();
-            return handleRequestError(requestId, subject, e, startTime);
-        } finally {
-            MDC.clear();
-        }
+        logger.info("Delegating request processing to specialized processor - Subject: {}", subject);
+        return requestProcessor.processMessage(subject, requestPayload, correlationId);
     }
     
-    private CompletableFuture<String> processRequest(String requestId, String subject, 
-            Object requestPayload, String correlationId, Instant startTime) {
-        
-        try {
-            String jsonPayload = payloadProcessor.serialize(requestPayload);
-            
-            NatsRequestLog requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, correlationId);
-            requestLogService.saveRequestLog(requestLog);
-            
-            logger.debug("Request logged to database, sending to NATS");
-            
-            Message response = sendNatsRequest(subject, jsonPayload);
-            
-            if (response != null) {
-                return handleSuccessfulResponse(requestId, response, startTime);
-            } else {
-                // JetStream async processing - message published successfully
-                return handleJetStreamAsyncProcessing(requestId, startTime);
-            }
-            
-        } catch (Exception e) {
-            return handleRequestError(requestId, subject, e, startTime);
-        }
-    }
-    
-    private Message sendNatsRequest(String subject, String jsonPayload) throws Exception {
-        byte[] payloadBytes = payloadProcessor.toBytes(jsonPayload);
-        Duration timeout = Duration.ofMillis(natsProperties.getRequest().getTimeout());
-        
-        logger.debug("Publishing message to JetStream with subject: {}", subject);
-        
-        // Use JetStream for all message publishing to ensure durability and reliability
-        PublishOptions publishOptions = PublishOptions.builder()
-                .expectedStream(natsProperties.getJetStream().getStream().getDefaultName())
-                .build();
-        
-        PublishAck publishAck = jetStream.publish(subject, payloadBytes, publishOptions);
-        logger.debug("JetStream message published - Sequence: {}, Stream: {}", 
-                    publishAck.getSeqno(), publishAck.getStream());
-        
-        // For compatibility with request-response pattern, we simulate a response
-        // In a pure JetStream architecture, responses would come from consumers
-        // For now, we'll return null to indicate async processing
-        logger.info("Message published to JetStream successfully - transitioning to async processing model");
-        return null; // This will be handled as async processing
-    }
-    
-    private CompletableFuture<String> handleSuccessfulResponse(String requestId, Message response, Instant startTime) {
-        try {
-            String responsePayload = payloadProcessor.fromBytes(response.getData());
-            
-            requestLogService.updateWithSuccess(requestId, responsePayload);
-            successCounter.increment();
-            
-            long duration = Duration.between(startTime, Instant.now()).toMillis();
-            logger.info("NATS request completed successfully in {}ms, response length: {}", 
-                       duration, responsePayload.length());
-            
-            return CompletableFuture.completedFuture(responsePayload);
-            
-        } catch (Exception e) {
-            logger.error("Error processing successful response", e);
-            return handleRequestError(requestId, "response_processing", e, startTime);
-        }
-    }
-    
-    private CompletableFuture<String> handleJetStreamAsyncProcessing(String requestId, Instant startTime) {
-        String successMessage = "Message published to JetStream successfully - processing asynchronously";
-        
-        requestLogService.updateWithSuccess(requestId, successMessage);
-        successCounter.increment();
-        
-        long duration = Duration.between(startTime, Instant.now()).toMillis();
-        logger.info("JetStream message published successfully in {}ms - async processing initiated", duration);
-        
-        // For JetStream async processing, we return a success response indicating the message was published
-        return CompletableFuture.completedFuture(successMessage);
-    }
-    
-    private CompletableFuture<String> handleTimeoutResponse(String requestId, Instant startTime) {
-        String errorMessage = "No response received within timeout period";
-        
-        requestLogService.updateWithTimeout(requestId, errorMessage);
-        errorCounter.increment();
-        
-        long duration = Duration.between(startTime, Instant.now()).toMillis();
-        logger.warn("NATS request timed out after {}ms", duration);
-        
-        CompletableFuture<String> future = new CompletableFuture<>();
-        future.completeExceptionally(new NatsTimeoutException(errorMessage, requestId));
-        return future;
-    }
-    
-    private CompletableFuture<String> handleRequestError(String requestId, String context, Exception e, Instant startTime) {
-        String errorMessage = String.format("Error in %s: %s", context, e.getMessage());
-        
-        requestLogService.updateWithError(requestId, errorMessage);
-        errorCounter.increment();
-        
-        long duration = Duration.between(startTime, Instant.now()).toMillis();
-        logger.error("NATS request failed after {}ms in context: {}", duration, context, e);
-        
-        CompletableFuture<String> future = new CompletableFuture<>();
-        future.completeExceptionally(new NatsRequestException(errorMessage, requestId, e));
-        return future;
-    }
     
     @Override
     @Async
     public CompletableFuture<Void> publishMessage(String subject, Object messagePayload) {
-        String requestId = UUID.randomUUID().toString();
-        Instant startTime = Instant.now();
-        
-        MDC.put("requestId", requestId);
-        MDC.put("subject", subject);
-        MDC.put("operation", "jetstream_publish");
-        
-        try {
-            requestValidator.validateRequest(subject, messagePayload);
-            
-            String jsonPayload = payloadProcessor.serialize(messagePayload);
-            
-            // Use JetStream for reliable message publishing
-            PublishOptions publishOptions = PublishOptions.builder()
-                    .expectedStream(natsProperties.getJetStream().getStream().getDefaultName())
-                    .build();
-            
-            PublishAck publishAck = jetStream.publish(subject, payloadProcessor.toBytes(jsonPayload), publishOptions);
-            
-            NatsRequestLog requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, null);
-            requestLog.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
-            requestLog.setResponsePayload("JetStream Publish ACK - Sequence: " + publishAck.getSeqno() + 
-                                        ", Stream: " + publishAck.getStream());
-            requestLogService.saveRequestLog(requestLog);
-            
-            long duration = Duration.between(startTime, Instant.now()).toMillis();
-            logger.info("JetStream message published successfully in {}ms - Sequence: {}", duration, publishAck.getSeqno());
-            
-            return CompletableFuture.completedFuture(null);
-            
-        } catch (Exception e) {
-            long duration = Duration.between(startTime, Instant.now()).toMillis();
-            logger.error("Failed to publish JetStream message after {}ms", duration, e);
-            
-            requestLogService.updateWithError(requestId, "Error publishing JetStream message: " + e.getMessage());
-            
-            CompletableFuture<Void> future = new CompletableFuture<>();
-            future.completeExceptionally(new NatsRequestException("Failed to publish JetStream message", requestId, e));
-            return future;
-        } finally {
-            MDC.clear();
-        }
+        logger.info("Delegating publish processing to specialized processor - Subject: {}", subject);
+        return publishProcessor.processMessage(subject, messagePayload, null);
     }
 }
