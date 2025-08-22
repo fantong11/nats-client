@@ -4,13 +4,12 @@ import com.example.natsclient.config.NatsProperties;
 import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.exception.NatsTimeoutException;
+import com.example.natsclient.service.NatsOperations;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
+import com.example.natsclient.service.ResponseHandler;
 import com.example.natsclient.service.validator.RequestValidator;
-import io.nats.client.Connection;
-import io.nats.client.JetStream;
 import io.nats.client.Message;
-import io.nats.client.PublishOptions;
 import io.nats.client.api.PublishAck;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -30,10 +30,10 @@ import static org.mockito.Mockito.*;
 class NatsMessageServiceImplTest {
 
     @Mock
-    private Connection natsConnection;
+    private NatsOperations natsOperations;
 
     @Mock
-    private JetStream jetStream;
+    private ResponseHandler<String> responseHandler;
 
     @Mock
     private RequestLogService requestLogService;
@@ -49,12 +49,6 @@ class NatsMessageServiceImplTest {
 
     @Mock
     private NatsProperties.Request requestProperties;
-
-    @Mock
-    private NatsProperties.JetStream jetStreamProperties;
-
-    @Mock
-    private NatsProperties.JetStream.Stream streamProperties;
 
     @Mock
     private Message mockMessage;
@@ -78,9 +72,6 @@ class NatsMessageServiceImplTest {
         // Configure common mock behavior - only when actually used
         lenient().when(natsProperties.getRequest()).thenReturn(requestProperties);
         lenient().when(requestProperties.getTimeout()).thenReturn(30000L);
-        lenient().when(natsProperties.getJetStream()).thenReturn(jetStreamProperties);
-        lenient().when(jetStreamProperties.getStream()).thenReturn(streamProperties);
-        lenient().when(streamProperties.getDefaultName()).thenReturn("DEFAULT_STREAM");
         lenient().when(mockPublishAck.getSeqno()).thenReturn(1L);
         lenient().when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
     }
@@ -89,14 +80,16 @@ class NatsMessageServiceImplTest {
     void sendRequest_Success_ShouldReturnSuccessfulResponse() throws Exception {
         // Arrange
         NatsRequestLog mockRequestLog = new NatsRequestLog();
+        CompletableFuture<String> expectedResponse = CompletableFuture.completedFuture(responsePayload);
+        
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
-        when(payloadProcessor.fromBytes(responseBytes)).thenReturn(responsePayload);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), eq(testCorrelationId)))
                 .thenReturn(mockRequestLog);
-        when(natsConnection.request(eq(testSubject), eq(payloadBytes), any(Duration.class)))
+        when(natsOperations.sendRequest(eq(testSubject), eq(payloadBytes), any(Duration.class)))
                 .thenReturn(mockMessage);
-        when(mockMessage.getData()).thenReturn(responseBytes);
+        when(responseHandler.handleSuccess(anyString(), eq(mockMessage)))
+                .thenReturn(expectedResponse);
 
         // Act
         CompletableFuture<String> result = natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId);
@@ -108,27 +101,36 @@ class NatsMessageServiceImplTest {
         verify(requestValidator).validateRequest(testSubject, testPayload);
         verify(requestValidator).validateCorrelationId(testCorrelationId);
         verify(requestLogService).saveRequestLog(mockRequestLog);
-        verify(requestLogService).updateWithSuccess(anyString(), eq(responsePayload));
-        verify(natsConnection).request(eq(testSubject), eq(payloadBytes), any(Duration.class));
+        verify(natsOperations).sendRequest(eq(testSubject), eq(payloadBytes), any(Duration.class));
+        verify(responseHandler).handleSuccess(anyString(), eq(mockMessage));
     }
 
     @Test
     void sendRequest_TimeoutResponse_ShouldThrowNatsTimeoutException() throws Exception {
         // Arrange
         NatsRequestLog mockRequestLog = new NatsRequestLog();
+        CompletableFuture<String> timeoutFuture = new CompletableFuture<>();
+        timeoutFuture.completeExceptionally(new NatsTimeoutException("Request timeout", "test-id"));
+        
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), eq(testCorrelationId)))
                 .thenReturn(mockRequestLog);
-        when(natsConnection.request(eq(testSubject), eq(payloadBytes), any(Duration.class)))
+        when(natsOperations.sendRequest(eq(testSubject), eq(payloadBytes), any(Duration.class)))
                 .thenReturn(null); // NATS returns null on timeout
+        when(responseHandler.handleTimeout(anyString()))
+                .thenReturn(timeoutFuture);
 
         // Act & Assert
-        assertThrows(NatsTimeoutException.class, () -> {
-            natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId);
+        CompletableFuture<String> result = natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId);
+        
+        ExecutionException executionException = assertThrows(ExecutionException.class, () -> {
+            result.get(); // This should throw the ExecutionException
         });
+        
+        assertTrue(executionException.getCause() instanceof NatsTimeoutException);
 
-        verify(requestLogService).updateWithTimeout(anyString(), eq("No response received within timeout period"));
+        verify(responseHandler).handleTimeout(anyString());
     }
 
     @Test
@@ -143,52 +145,74 @@ class NatsMessageServiceImplTest {
         });
 
         verify(requestLogService, never()).createRequestLog(anyString(), anyString(), anyString(), anyString());
-        verify(natsConnection, never()).request(anyString(), any(byte[].class), any(Duration.class));
+        verify(natsOperations, never()).sendRequest(anyString(), any(byte[].class), any(Duration.class));
     }
 
     @Test
     void sendRequest_SerializationFailure_ShouldThrowNatsRequestException() throws Exception {
         // Arrange
+        RuntimeException serializationException = new RuntimeException("Serialization failed");
+        CompletableFuture<String> errorFuture = new CompletableFuture<>();
+        errorFuture.completeExceptionally(new NatsRequestException("Serialization failed", "test-id", serializationException));
+        
         when(payloadProcessor.serialize(testPayload))
-                .thenThrow(new RuntimeException("Serialization failed"));
+                .thenThrow(serializationException);
+        when(responseHandler.handleError(anyString(), eq(serializationException)))
+                .thenReturn(errorFuture);
 
         // Act & Assert
-        assertThrows(NatsRequestException.class, () -> {
-            natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId);
+        CompletableFuture<String> result = natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId);
+        
+        ExecutionException executionException = assertThrows(ExecutionException.class, () -> {
+            result.get(); // This should throw the ExecutionException
         });
+        
+        assertTrue(executionException.getCause() instanceof NatsRequestException);
 
-        verify(requestLogService).updateWithError(anyString(), contains("Serialization failed"));
+        verify(responseHandler).handleError(anyString(), eq(serializationException));
     }
 
     @Test
     void sendRequest_NatsConnectionFailure_ShouldThrowNatsRequestException() throws Exception {
         // Arrange
         NatsRequestLog mockRequestLog = new NatsRequestLog();
+        RuntimeException connectionException = new RuntimeException("Connection failed");
+        CompletableFuture<String> errorFuture = new CompletableFuture<>();
+        errorFuture.completeExceptionally(new NatsRequestException("Connection failed", "test-id", connectionException));
+        
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), eq(testCorrelationId)))
                 .thenReturn(mockRequestLog);
-        when(natsConnection.request(eq(testSubject), eq(payloadBytes), any(Duration.class)))
-                .thenThrow(new RuntimeException("Connection failed"));
+        when(natsOperations.sendRequest(eq(testSubject), eq(payloadBytes), any(Duration.class)))
+                .thenThrow(connectionException);
+        when(responseHandler.handleError(anyString(), eq(connectionException)))
+                .thenReturn(errorFuture);
 
         // Act & Assert
-        assertThrows(NatsRequestException.class, () -> {
-            natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId);
+        CompletableFuture<String> result = natsMessageService.sendRequest(testSubject, testPayload, testCorrelationId);
+        
+        ExecutionException executionException = assertThrows(ExecutionException.class, () -> {
+            result.get(); // This should throw the ExecutionException
         });
+        
+        assertTrue(executionException.getCause() instanceof NatsRequestException);
 
-        verify(requestLogService).updateWithError(anyString(), contains("Connection failed"));
+        verify(responseHandler).handleError(anyString(), eq(connectionException));
     }
 
     @Test
     void publishMessage_Success_ShouldCompleteSuccessfully() throws Exception {
         // Arrange
         NatsRequestLog mockRequestLog = mock(NatsRequestLog.class);
+        CompletableFuture<PublishAck> publishFuture = CompletableFuture.completedFuture(mockPublishAck);
+        
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), isNull()))
                 .thenReturn(mockRequestLog);
-        when(jetStream.publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class)))
-                .thenReturn(mockPublishAck);
+        when(natsOperations.publishMessage(eq(testSubject), eq(payloadBytes)))
+                .thenReturn(publishFuture);
 
         // Act
         CompletableFuture<Void> result = natsMessageService.publishMessage(testSubject, testPayload);
@@ -198,18 +222,14 @@ class NatsMessageServiceImplTest {
         assertDoesNotThrow(() -> result.get());
         
         verify(requestValidator).validateRequest(testSubject, testPayload);
-        try {
-            verify(jetStream).publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class));
-        } catch (Exception e) {
-            // Ignore verification exceptions
-        }
+        verify(natsOperations).publishMessage(eq(testSubject), eq(payloadBytes));
         verify(mockRequestLog).setStatus(NatsRequestLog.RequestStatus.SUCCESS);
         verify(mockRequestLog).setResponsePayload(contains("JetStream Publish ACK"));
         verify(requestLogService).saveRequestLog(mockRequestLog);
     }
 
     @Test
-    void publishMessage_ValidationFailure_ShouldThrowException() {
+    void publishMessage_ValidationFailure_ShouldThrowException() throws Exception {
         // Arrange
         doThrow(new IllegalArgumentException("Invalid payload")).when(requestValidator)
                 .validateRequest(testSubject, testPayload);
@@ -219,20 +239,14 @@ class NatsMessageServiceImplTest {
             natsMessageService.publishMessage(testSubject, testPayload);
         });
 
-        try {
-            verify(jetStream, never()).publish(anyString(), any(byte[].class), any(PublishOptions.class));
-        } catch (Exception e) {
-            // Ignore verification exceptions
-        }
+        verify(natsOperations, never()).publishMessage(anyString(), any(byte[].class));
     }
 
     @Test
     void publishMessage_PublishFailure_ShouldThrowNatsRequestException() throws Exception {
         // Arrange
-        when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
-        when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
-        doThrow(new RuntimeException("JetStream publish failed")).when(jetStream)
-                .publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class));
+        when(payloadProcessor.serialize(testPayload))
+                .thenThrow(new RuntimeException("JetStream publish failed"));
 
         // Act & Assert
         assertThrows(NatsRequestException.class, () -> {
@@ -246,14 +260,16 @@ class NatsMessageServiceImplTest {
     void sendRequest_WithNullCorrelationId_ShouldWork() throws Exception {
         // Arrange
         NatsRequestLog mockRequestLog = new NatsRequestLog();
+        CompletableFuture<String> expectedResponse = CompletableFuture.completedFuture(responsePayload);
+        
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
-        when(payloadProcessor.fromBytes(responseBytes)).thenReturn(responsePayload);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), isNull()))
                 .thenReturn(mockRequestLog);
-        when(natsConnection.request(eq(testSubject), eq(payloadBytes), any(Duration.class)))
+        when(natsOperations.sendRequest(eq(testSubject), eq(payloadBytes), any(Duration.class)))
                 .thenReturn(mockMessage);
-        when(mockMessage.getData()).thenReturn(responseBytes);
+        when(responseHandler.handleSuccess(anyString(), eq(mockMessage)))
+                .thenReturn(expectedResponse);
 
         // Act
         CompletableFuture<String> result = natsMessageService.sendRequest(testSubject, testPayload, null);
@@ -263,6 +279,7 @@ class NatsMessageServiceImplTest {
         assertEquals(responsePayload, result.get());
         
         verify(requestValidator).validateCorrelationId(null);
+        verify(responseHandler).handleSuccess(anyString(), eq(mockMessage));
     }
 
     private static class TestPayload {

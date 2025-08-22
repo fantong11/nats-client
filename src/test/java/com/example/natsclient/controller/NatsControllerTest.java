@@ -93,9 +93,13 @@ class NatsControllerTest {
                 """;
 
         // Act & Assert
-        mockMvc.perform(post("/api/nats/request")
+        var mvcResult = mockMvc.perform(post("/api/nats/request")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(mvcResult))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.subject").value("test.subject"))
@@ -121,9 +125,13 @@ class NatsControllerTest {
                 """;
 
         // Act & Assert
-        mockMvc.perform(post("/api/nats/request")
+        var mvcResult = mockMvc.perform(post("/api/nats/request")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(mvcResult))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.errorMessage").value("Test error"));
@@ -184,11 +192,13 @@ class NatsControllerTest {
                 """;
 
         // Act & Assert
-        mockMvc.perform(post("/api/nats/publish")
+        var mvcResult = mockMvc.perform(post("/api/nats/publish")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
                 .andExpect(request().asyncStarted())
-                .andDo(result -> mockMvc.perform(asyncDispatch(result)))
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(mvcResult))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.requestId").value("test-request-id-123"))
                 .andExpect(jsonPath("$.status").value("PUBLISHED"))
@@ -313,9 +323,13 @@ class NatsControllerTest {
                 """;
 
         // Act & Assert
-        mockMvc.perform(post("/api/nats/test/echo")
+        var mvcResult = mockMvc.perform(post("/api/nats/test/echo")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(echoJson))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(mvcResult))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
 
