@@ -21,8 +21,12 @@ import org.springframework.web.context.WebApplicationContext;
 
 import io.nats.client.Connection;
 import io.nats.client.JetStream;
+import io.nats.client.JetStreamManagement;
 import io.nats.client.PublishOptions;
 import io.nats.client.api.PublishAck;
+import com.example.natsclient.service.observer.NatsEventPublisher;
+import com.example.natsclient.service.observer.impl.LoggingEventObserver;
+import com.example.natsclient.service.observer.impl.MetricsEventObserver;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -37,7 +41,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.url=jdbc:h2:mem:testdb",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.jpa.hibernate.ddl-auto=create-drop",
-        "nats.url=nats://mock-nats:4222"
+        "nats.url=nats://mock-nats:4222",
+        "spring.main.allow-bean-definition-overriding=true"
 })
 @Transactional
 public class NatsIntegrationTest {
@@ -53,6 +58,18 @@ public class NatsIntegrationTest {
 
     @MockBean
     private PublishAck mockPublishAck;
+    
+    @MockBean
+    private JetStreamManagement jetStreamManagement;
+    
+    @MockBean
+    private NatsEventPublisher natsEventPublisher;
+    
+    @MockBean
+    private LoggingEventObserver loggingEventObserver;
+    
+    @MockBean
+    private MetricsEventObserver metricsEventObserver;
 
     @Autowired
     private NatsRequestLogRepository requestLogRepository;

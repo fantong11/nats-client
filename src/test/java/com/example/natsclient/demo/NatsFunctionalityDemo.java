@@ -6,10 +6,13 @@ import com.example.natsclient.service.NatsOperations;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
 import com.example.natsclient.service.ResponseHandler;
+import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
+import com.example.natsclient.service.factory.MetricsFactory;
 import com.example.natsclient.service.impl.EnhancedNatsMessageService;
 import com.example.natsclient.service.impl.HybridNatsOperations;
 import com.example.natsclient.service.impl.NatsMessageServiceImpl;
 import com.example.natsclient.service.impl.StringResponseHandler;
+import com.example.natsclient.service.observer.NatsEventPublisher;
 import com.example.natsclient.service.validator.RequestValidator;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -63,6 +66,15 @@ class NatsFunctionalityDemo {
     @Mock
     private Message mockMessage;
     
+    @Mock
+    private MetricsFactory metricsFactory;
+    
+    @Mock
+    private NatsPublishOptionsBuilder publishOptionsBuilder;
+    
+    @Mock
+    private NatsEventPublisher eventPublisher;
+    
     // SOLID-compliant dependencies
     private NatsOperations natsOperations;
     private ResponseHandler<String> responseHandler;
@@ -72,25 +84,38 @@ class NatsFunctionalityDemo {
 
     @BeforeEach
     void setUp() {
-        when(natsProperties.getRequest()).thenReturn(requestProperties);
-        when(requestProperties.getTimeout()).thenReturn(5000L);
-        when(natsProperties.getJetStream()).thenReturn(jetStreamProperties);
-        when(jetStreamProperties.getStream()).thenReturn(streamProperties);
-        when(streamProperties.getDefaultName()).thenReturn("DEFAULT_STREAM");
-        when(mockPublishAck.getSeqno()).thenReturn(1L);
-        when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
+        // Essential properties - may not be used in all tests
+        lenient().when(natsProperties.getRequest()).thenReturn(requestProperties);
+        lenient().when(requestProperties.getTimeout()).thenReturn(5000L);
+        lenient().when(natsProperties.getJetStream()).thenReturn(jetStreamProperties);
+        lenient().when(jetStreamProperties.getStream()).thenReturn(streamProperties);
+        lenient().when(streamProperties.getDefaultName()).thenReturn("DEFAULT_STREAM");
+        lenient().when(mockPublishAck.getSeqno()).thenReturn(1L);
+        lenient().when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
         
         // Mock JetStream publish method
         try {
-            when(jetStream.publish(anyString(), any(byte[].class), any(PublishOptions.class)))
+            lenient().when(jetStream.publish(anyString(), any(byte[].class), any(PublishOptions.class)))
                     .thenReturn(mockPublishAck);
         } catch (Exception e) {
             // Handle checked exception
         }
         
-        // Setup for enhanced service
-        when(meterRegistry.counter(anyString())).thenReturn(mock(Counter.class));
-        when(meterRegistry.timer(anyString())).thenReturn(mock(Timer.class));
+        // Setup for enhanced service - may not be used in all tests
+        lenient().when(meterRegistry.counter(anyString())).thenReturn(mock(Counter.class));
+        lenient().when(meterRegistry.timer(anyString())).thenReturn(mock(Timer.class));
+        
+        // Mock the new dependencies for enhanced service
+        MetricsFactory.NatsMetricsSet metricsSet = mock(MetricsFactory.NatsMetricsSet.class);
+        when(metricsSet.getRequestCounter()).thenReturn(mock(Counter.class));
+        when(metricsSet.getSuccessCounter()).thenReturn(mock(Counter.class));
+        when(metricsSet.getErrorCounter()).thenReturn(mock(Counter.class));
+        when(metricsSet.getRequestTimer()).thenReturn(mock(Timer.class));
+        when(metricsFactory.createNatsMetricsSet(anyString(), eq(meterRegistry))).thenReturn(metricsSet);
+        
+        PublishOptions mockPublishOptions = mock(PublishOptions.class);
+        lenient().when(publishOptionsBuilder.createDefault()).thenReturn(mockPublishOptions);
+        lenient().when(publishOptionsBuilder.createCritical()).thenReturn(mockPublishOptions);
         
         // Create SOLID-compliant dependencies
         natsOperations = new HybridNatsOperations(natsConnection, jetStream, natsProperties);
@@ -102,7 +127,8 @@ class NatsFunctionalityDemo {
         
         enhancedService = new EnhancedNatsMessageService(
                 natsConnection, jetStream, requestLogService, payloadProcessor, 
-                requestValidator, natsProperties, meterRegistry);
+                requestValidator, natsProperties, meterRegistry, metricsFactory,
+                publishOptionsBuilder, eventPublisher);
     }
 
     @Test

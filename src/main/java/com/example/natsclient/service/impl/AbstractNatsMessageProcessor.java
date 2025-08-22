@@ -5,6 +5,11 @@ import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
+import com.example.natsclient.service.event.impl.MessageCompletedEvent;
+import com.example.natsclient.service.event.impl.MessageFailedEvent;
+import com.example.natsclient.service.event.impl.MessageStartedEvent;
+import com.example.natsclient.service.factory.MetricsFactory;
+import com.example.natsclient.service.observer.NatsEventPublisher;
 import com.example.natsclient.service.validator.RequestValidator;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -15,6 +20,8 @@ import org.slf4j.MDC;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -38,6 +45,7 @@ public abstract class AbstractNatsMessageProcessor<T> {
     protected final PayloadProcessor payloadProcessor;
     protected final RequestValidator requestValidator;
     protected final NatsProperties natsProperties;
+    protected final NatsEventPublisher eventPublisher;
     
     // Metrics
     protected final Counter requestCounter;
@@ -50,18 +58,25 @@ public abstract class AbstractNatsMessageProcessor<T> {
             PayloadProcessor payloadProcessor,
             RequestValidator requestValidator,
             NatsProperties natsProperties,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            MetricsFactory metricsFactory,
+            NatsEventPublisher eventPublisher,
+            String operationType) {
         
         this.requestLogService = requestLogService;
         this.payloadProcessor = payloadProcessor;
         this.requestValidator = requestValidator;
         this.natsProperties = natsProperties;
+        this.eventPublisher = eventPublisher;
         
-        // Initialize metrics with fallback handling
-        this.requestCounter = createCounter("nats.requests.total", "Total number of NATS requests", meterRegistry);
-        this.successCounter = createCounter("nats.requests.success", "Number of successful NATS requests", meterRegistry);
-        this.errorCounter = createCounter("nats.requests.error", "Number of failed NATS requests", meterRegistry);
-        this.requestTimer = createTimer("nats.request.duration", "NATS request duration", meterRegistry);
+        // Use MetricsFactory to create metrics with consistent naming and fallback handling
+        MetricsFactory.NatsMetricsSet metricsSet = metricsFactory.createNatsMetricsSet(
+                operationType, meterRegistry);
+        
+        this.requestCounter = metricsSet.getRequestCounter();
+        this.successCounter = metricsSet.getSuccessCounter();
+        this.errorCounter = metricsSet.getErrorCounter();
+        this.requestTimer = metricsSet.getRequestTimer();
     }
     
     /**
@@ -71,6 +86,7 @@ public abstract class AbstractNatsMessageProcessor<T> {
     public final CompletableFuture<T> processMessage(String subject, Object payload, String correlationId) {
         // Step 1: Initialize request
         String requestId = initializeRequest();
+        String eventId = UUID.randomUUID().toString();
         Instant startTime = Instant.now();
         
         // Step 2: Setup structured logging context
@@ -83,18 +99,32 @@ public abstract class AbstractNatsMessageProcessor<T> {
             // Step 4: Increment request metrics
             requestCounter.increment();
             
-            // Step 5: Log processing start
+            // Step 5: Publish start event
+            publishStartEvent(eventId, requestId, subject, payload, correlationId);
+            
+            // Step 6: Log processing start
             logger.info("Starting {} processing", getOperationType());
             
-            // Step 6: Execute specific processing logic (implemented by subclasses)
-            return executeSpecificProcessing(requestId, subject, payload, correlationId, startTime);
+            // Step 7: Execute specific processing logic and wrap with event publishing
+            return executeSpecificProcessing(requestId, subject, payload, correlationId, startTime)
+                    .whenComplete((result, throwable) -> {
+                        Duration processingTime = Duration.between(startTime, Instant.now());
+                        
+                        if (throwable != null) {
+                            publishFailedEvent(eventId, requestId, subject, throwable, processingTime, 1);
+                        } else {
+                            publishCompletedEvent(eventId, requestId, subject, result, processingTime);
+                        }
+                    });
                     
         } catch (Exception e) {
-            // Step 7: Handle synchronous errors
+            // Step 8: Handle synchronous errors
             errorCounter.increment();
+            Duration processingTime = Duration.between(startTime, Instant.now());
+            publishFailedEvent(eventId, requestId, subject, e, processingTime, 1);
             return handleSynchronousError(requestId, subject, e, startTime);
         } finally {
-            // Step 8: Cleanup MDC context
+            // Step 9: Cleanup MDC context
             cleanupMDC();
         }
     }
@@ -170,31 +200,62 @@ public abstract class AbstractNatsMessageProcessor<T> {
      */
     protected abstract boolean requiresCorrelationIdValidation();
     
-    // Helper methods for metrics creation
+    // Event publishing helper methods for Observer Pattern
     
-    private Counter createCounter(String name, String description, MeterRegistry registry) {
+    /**
+     * Publishes a message started event.
+     */
+    protected void publishStartEvent(String eventId, String requestId, String subject, Object payload, String correlationId) {
         try {
-            return Counter.builder(name)
-                    .description(description)
-                    .register(registry);
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("timestamp", Instant.now());
+            
+            MessageStartedEvent event = new MessageStartedEvent(
+                    eventId, requestId, subject, getOperationType(), payload, correlationId, metadata);
+            
+            eventPublisher.publishEvent(event);
         } catch (Exception e) {
-            logger.warn("Failed to register counter {}: {}. Using no-op counter.", name, e.getMessage());
-            return Counter.builder(name)
-                    .description(description)
-                    .register(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+            logger.warn("Failed to publish start event: {}", e.getMessage());
         }
     }
     
-    private Timer createTimer(String name, String description, MeterRegistry registry) {
+    /**
+     * Publishes a message completed event.
+     */
+    protected void publishCompletedEvent(String eventId, String requestId, String subject, Object result, Duration processingTime) {
         try {
-            return Timer.builder(name)
-                    .description(description)
-                    .register(registry);
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("processingTime", processingTime.toMillis());
+            metadata.put("timestamp", Instant.now());
+            
+            MessageCompletedEvent event = new MessageCompletedEvent(
+                    eventId, requestId, subject, getOperationType(), result, processingTime, metadata);
+            
+            eventPublisher.publishEvent(event);
         } catch (Exception e) {
-            logger.warn("Failed to register timer {}: {}. Using no-op timer.", name, e.getMessage());
-            return Timer.builder(name)
-                    .description(description)
-                    .register(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+            logger.warn("Failed to publish completed event: {}", e.getMessage());
         }
     }
+    
+    /**
+     * Publishes a message failed event.
+     */
+    protected void publishFailedEvent(String eventId, String requestId, String subject, Throwable throwable, Duration processingTime, int attemptNumber) {
+        try {
+            Exception exception = (throwable instanceof Exception) ? (Exception) throwable : new Exception(throwable);
+            
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("processingTime", processingTime.toMillis());
+            metadata.put("timestamp", Instant.now());
+            metadata.put("exceptionType", exception.getClass().getSimpleName());
+            
+            MessageFailedEvent event = new MessageFailedEvent(
+                    eventId, requestId, subject, getOperationType(), exception, processingTime, attemptNumber, metadata);
+            
+            eventPublisher.publishEvent(event);
+        } catch (Exception e) {
+            logger.warn("Failed to publish failed event: {}", e.getMessage());
+        }
+    }
+    
 }

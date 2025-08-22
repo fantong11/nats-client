@@ -4,7 +4,10 @@ import com.example.natsclient.config.NatsProperties;
 import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
+import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
+import com.example.natsclient.service.factory.MetricsFactory;
 import com.example.natsclient.service.impl.EnhancedNatsMessageService;
+import com.example.natsclient.service.observer.NatsEventPublisher;
 import com.example.natsclient.service.validator.RequestValidator;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.nats.client.Connection;
@@ -72,6 +75,15 @@ class NatsPerformanceTest {
     @Mock
     private Message mockMessage;
 
+    @Mock
+    private MetricsFactory metricsFactory;
+
+    @Mock
+    private NatsPublishOptionsBuilder publishOptionsBuilder;
+
+    @Mock
+    private NatsEventPublisher eventPublisher;
+
     private EnhancedNatsMessageService natsService;
 
     private final String testSubject = "performance.test";
@@ -83,28 +95,46 @@ class NatsPerformanceTest {
 
     @BeforeEach
     void setUp() {
-        when(natsProperties.getRequest()).thenReturn(requestProperties);
-        when(requestProperties.getTimeout()).thenReturn(30000L);
-        when(natsProperties.getJetStream()).thenReturn(jetStreamProperties);
-        when(jetStreamProperties.getStream()).thenReturn(streamProperties);
-        when(streamProperties.getDefaultName()).thenReturn("DEFAULT_STREAM");
-        when(mockPublishAck.getSeqno()).thenReturn(1L);
-        when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
+        // Essential properties configuration
+        lenient().when(natsProperties.getRequest()).thenReturn(requestProperties);
+        lenient().when(requestProperties.getTimeout()).thenReturn(30000L);
+        lenient().when(natsProperties.getJetStream()).thenReturn(jetStreamProperties);
+        lenient().when(jetStreamProperties.getStream()).thenReturn(streamProperties);
+        lenient().when(streamProperties.getDefaultName()).thenReturn("DEFAULT_STREAM");
+        lenient().when(mockPublishAck.getSeqno()).thenReturn(1L);
+        lenient().when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
         
-        when(meterRegistry.counter(anyString())).thenReturn(mock(io.micrometer.core.instrument.Counter.class));
-        when(meterRegistry.timer(anyString())).thenReturn(mock(io.micrometer.core.instrument.Timer.class));
+        // Lenient mocks for metrics (may not be called in all tests)
+        lenient().when(meterRegistry.counter(anyString())).thenReturn(mock(io.micrometer.core.instrument.Counter.class));
+        lenient().when(meterRegistry.timer(anyString())).thenReturn(mock(io.micrometer.core.instrument.Timer.class));
+        
+        // Mock the new dependencies
+        MetricsFactory.NatsMetricsSet metricsSet = mock(MetricsFactory.NatsMetricsSet.class);
+        when(metricsSet.getRequestCounter()).thenReturn(mock(io.micrometer.core.instrument.Counter.class));
+        when(metricsSet.getSuccessCounter()).thenReturn(mock(io.micrometer.core.instrument.Counter.class));
+        when(metricsSet.getErrorCounter()).thenReturn(mock(io.micrometer.core.instrument.Counter.class));
+        when(metricsSet.getRequestTimer()).thenReturn(mock(io.micrometer.core.instrument.Timer.class));
+        when(metricsFactory.createNatsMetricsSet(anyString(), eq(meterRegistry))).thenReturn(metricsSet);
+        
+        PublishOptions mockPublishOptions = mock(PublishOptions.class);
+        lenient().when(publishOptionsBuilder.createDefault()).thenReturn(mockPublishOptions);
+        lenient().when(publishOptionsBuilder.createCritical()).thenReturn(mockPublishOptions);
         
         natsService = new EnhancedNatsMessageService(
                 natsConnection, jetStream, requestLogService, payloadProcessor, 
-                requestValidator, natsProperties, meterRegistry);
+                requestValidator, natsProperties, meterRegistry, metricsFactory,
+                publishOptionsBuilder, eventPublisher);
 
+        // Essential mocks for payload processing
         when(payloadProcessor.serialize(any())).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
-        when(payloadProcessor.fromBytes(responseBytes)).thenReturn(responsePayload);
+        lenient().when(payloadProcessor.fromBytes(responseBytes)).thenReturn(responsePayload);
         when(requestLogService.createRequestLog(anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(new NatsRequestLog());
+        
+        // Essential mocks for NATS operations
         try {
-            when(natsConnection.request(anyString(), any(byte[].class), any(Duration.class)))
+            lenient().when(natsConnection.request(anyString(), any(byte[].class), any(Duration.class)))
                     .thenReturn(mockMessage);
             when(jetStream.publish(anyString(), any(byte[].class), any(PublishOptions.class)))
                     .thenReturn(mockPublishAck);
@@ -113,7 +143,7 @@ class NatsPerformanceTest {
         } catch (Exception e) {
             // Ignore for test setup
         }
-        when(mockMessage.getData()).thenReturn(responseBytes);
+        lenient().when(mockMessage.getData()).thenReturn(responseBytes);
         
         // Ignore interrupt status for test
         Thread.interrupted();

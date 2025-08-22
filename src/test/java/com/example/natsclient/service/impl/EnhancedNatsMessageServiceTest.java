@@ -6,6 +6,9 @@ import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.exception.NatsTimeoutException;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
+import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
+import com.example.natsclient.service.factory.MetricsFactory;
+import com.example.natsclient.service.observer.NatsEventPublisher;
 import com.example.natsclient.service.validator.RequestValidator;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -85,6 +88,15 @@ class EnhancedNatsMessageServiceTest {
     private Timer requestTimer;
 
     @Mock
+    private MetricsFactory metricsFactory;
+
+    @Mock
+    private NatsPublishOptionsBuilder publishOptionsBuilder;
+
+    @Mock
+    private NatsEventPublisher eventPublisher;
+
+    @Mock
     private Timer.Sample timerSample;
 
     @Mock
@@ -125,42 +137,25 @@ class EnhancedNatsMessageServiceTest {
         lenient().when(meterRegistry.config()).thenReturn(meterRegistryConfig);
         lenient().when(meterRegistryConfig.pauseDetector()).thenReturn(null);
         
-        // Create mock builders for Counter and Timer
-        Counter.Builder requestCounterBuilder = mock(Counter.Builder.class);
-        Counter.Builder successCounterBuilder = mock(Counter.Builder.class);
-        Counter.Builder errorCounterBuilder = mock(Counter.Builder.class);
-        Timer.Builder requestTimerBuilder = mock(Timer.Builder.class);
+        // Mock MetricsFactory behavior
+        MetricsFactory.NatsMetricsSet metricsSet = mock(MetricsFactory.NatsMetricsSet.class);
+        when(metricsSet.getRequestCounter()).thenReturn(requestCounter);
+        when(metricsSet.getSuccessCounter()).thenReturn(successCounter);
+        when(metricsSet.getErrorCounter()).thenReturn(errorCounter);
+        when(metricsSet.getRequestTimer()).thenReturn(requestTimer);
         
-        // Mock Counter.Builder chain for request counter
-        when(requestCounterBuilder.description(anyString())).thenReturn(requestCounterBuilder);
-        when(requestCounterBuilder.register(meterRegistry)).thenReturn(requestCounter);
+        when(metricsFactory.createNatsMetricsSet(anyString(), eq(meterRegistry))).thenReturn(metricsSet);
         
-        // Mock Counter.Builder chain for success counter  
-        when(successCounterBuilder.description(anyString())).thenReturn(successCounterBuilder);
-        when(successCounterBuilder.register(meterRegistry)).thenReturn(successCounter);
+        // Mock PublishOptionsBuilder
+        PublishOptions mockPublishOptions = mock(PublishOptions.class);
+        lenient().when(publishOptionsBuilder.createDefault()).thenReturn(mockPublishOptions);
+        lenient().when(publishOptionsBuilder.createCritical()).thenReturn(mockPublishOptions);
         
-        // Mock Counter.Builder chain for error counter
-        when(errorCounterBuilder.description(anyString())).thenReturn(errorCounterBuilder);
-        when(errorCounterBuilder.register(meterRegistry)).thenReturn(errorCounter);
-        
-        // Mock Timer.Builder chain
-        when(requestTimerBuilder.description(anyString())).thenReturn(requestTimerBuilder);
-        when(requestTimerBuilder.register(meterRegistry)).thenReturn(requestTimer);
-        
-        // Mock static Counter.builder method to return our mock builders
-        try (MockedStatic<Counter> counterMock = mockStatic(Counter.class);
-             MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
-            
-            counterMock.when(() -> Counter.builder("nats.requests.total")).thenReturn(requestCounterBuilder);
-            counterMock.when(() -> Counter.builder("nats.requests.success")).thenReturn(successCounterBuilder);
-            counterMock.when(() -> Counter.builder("nats.requests.error")).thenReturn(errorCounterBuilder);
-            timerMock.when(() -> Timer.builder("nats.request.duration")).thenReturn(requestTimerBuilder);
-            
-            // Now create the service - this should work with mocked static methods
-            enhancedService = new EnhancedNatsMessageService(
-                    natsConnection, jetStream, requestLogService, payloadProcessor, 
-                    requestValidator, natsProperties, meterRegistry);
-        }
+        // Now create the service with all required dependencies
+        enhancedService = new EnhancedNatsMessageService(
+                natsConnection, jetStream, requestLogService, payloadProcessor, 
+                requestValidator, natsProperties, meterRegistry, metricsFactory, 
+                publishOptionsBuilder, eventPublisher);
     }
 
     @Test

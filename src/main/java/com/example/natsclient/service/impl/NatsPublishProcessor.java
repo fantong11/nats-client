@@ -5,6 +5,9 @@ import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
+import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
+import com.example.natsclient.service.factory.MetricsFactory;
+import com.example.natsclient.service.observer.NatsEventPublisher;
 import com.example.natsclient.service.validator.RequestValidator;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.nats.client.JetStream;
@@ -26,6 +29,7 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
     private static final Logger logger = LoggerFactory.getLogger(NatsPublishProcessor.class);
     
     private final JetStream jetStream;
+    private final NatsPublishOptionsBuilder publishOptionsBuilder;
     
     public NatsPublishProcessor(
             JetStream jetStream,
@@ -33,10 +37,15 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
             PayloadProcessor payloadProcessor,
             RequestValidator requestValidator,
             NatsProperties natsProperties,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            MetricsFactory metricsFactory,
+            NatsPublishOptionsBuilder publishOptionsBuilder,
+            NatsEventPublisher eventPublisher) {
         
-        super(requestLogService, payloadProcessor, requestValidator, natsProperties, meterRegistry);
+        super(requestLogService, payloadProcessor, requestValidator, 
+              natsProperties, meterRegistry, metricsFactory, eventPublisher, "jetstream_publish");
         this.jetStream = jetStream;
+        this.publishOptionsBuilder = publishOptionsBuilder;
     }
     
     @Override
@@ -69,20 +78,18 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
     }
     
     /**
-     * Publish message to JetStream.
+     * Publish message to JetStream using Builder pattern for PublishOptions.
      */
     private PublishAck publishToJetStream(String subject, String jsonPayload) throws Exception {
         logger.debug("Publishing message to JetStream with subject: {}", subject);
         
-        // Use JetStream for reliable message publishing
-        PublishOptions publishOptions = PublishOptions.builder()
-                .expectedStream(natsProperties.getJetStream().getStream().getDefaultName())
-                .build();
+        // Use Builder pattern for flexible PublishOptions configuration
+        PublishOptions publishOptions = publishOptionsBuilder.createDefault();
         
         PublishAck publishAck = jetStream.publish(subject, payloadProcessor.toBytes(jsonPayload), publishOptions);
         
-        logger.debug("JetStream message published - Sequence: {}, Stream: {}", 
-                    publishAck.getSeqno(), publishAck.getStream());
+        logger.debug("JetStream message published - {}", 
+                    publishOptionsBuilder.formatPublishAck(publishAck));
         
         return publishAck;
     }

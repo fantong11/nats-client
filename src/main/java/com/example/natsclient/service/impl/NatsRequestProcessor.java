@@ -5,6 +5,9 @@ import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
+import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
+import com.example.natsclient.service.factory.MetricsFactory;
+import com.example.natsclient.service.observer.NatsEventPublisher;
 import com.example.natsclient.service.validator.RequestValidator;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.nats.client.JetStream;
@@ -27,6 +30,7 @@ public class NatsRequestProcessor extends AbstractNatsMessageProcessor<String> {
     private static final Logger logger = LoggerFactory.getLogger(NatsRequestProcessor.class);
     
     private final JetStream jetStream;
+    private final NatsPublishOptionsBuilder publishOptionsBuilder;
     
     public NatsRequestProcessor(
             JetStream jetStream,
@@ -34,10 +38,15 @@ public class NatsRequestProcessor extends AbstractNatsMessageProcessor<String> {
             PayloadProcessor payloadProcessor,
             RequestValidator requestValidator,
             NatsProperties natsProperties,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            MetricsFactory metricsFactory,
+            NatsPublishOptionsBuilder publishOptionsBuilder,
+            NatsEventPublisher eventPublisher) {
         
-        super(requestLogService, payloadProcessor, requestValidator, natsProperties, meterRegistry);
+        super(requestLogService, payloadProcessor, requestValidator, 
+              natsProperties, meterRegistry, metricsFactory, eventPublisher, "jetstream_request");
         this.jetStream = jetStream;
+        this.publishOptionsBuilder = publishOptionsBuilder;
     }
     
     @Override
@@ -70,21 +79,19 @@ public class NatsRequestProcessor extends AbstractNatsMessageProcessor<String> {
     }
     
     /**
-     * Send request to JetStream for reliable, durable processing.
+     * Send request to JetStream for reliable, durable processing using Builder pattern.
      */
     private Message sendJetStreamRequest(String subject, String jsonPayload) throws Exception {
         byte[] payloadBytes = payloadProcessor.toBytes(jsonPayload);
         
         logger.debug("Publishing request message to JetStream with subject: {}", subject);
         
-        // Use JetStream for reliable message publishing
-        PublishOptions publishOptions = PublishOptions.builder()
-                .expectedStream(natsProperties.getJetStream().getStream().getDefaultName())
-                .build();
+        // Use Builder pattern for critical request operations
+        PublishOptions publishOptions = publishOptionsBuilder.createCritical();
         
         PublishAck publishAck = jetStream.publish(subject, payloadBytes, publishOptions);
-        logger.debug("JetStream request message published - Sequence: {}, Stream: {}", 
-                    publishAck.getSeqno(), publishAck.getStream());
+        logger.debug("JetStream request message published - {}", 
+                    publishOptionsBuilder.formatPublishAck(publishAck));
         
         // In JetStream architecture, responses come asynchronously through consumers
         // Return null to indicate async processing

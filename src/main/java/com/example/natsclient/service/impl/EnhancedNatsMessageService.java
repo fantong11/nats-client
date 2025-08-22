@@ -5,6 +5,9 @@ import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.service.NatsMessageService;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
+import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
+import com.example.natsclient.service.factory.MetricsFactory;
+import com.example.natsclient.service.observer.NatsEventPublisher;
 import com.example.natsclient.service.validator.RequestValidator;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.nats.client.Connection;
@@ -47,16 +50,19 @@ public class EnhancedNatsMessageService implements NatsMessageService {
             PayloadProcessor payloadProcessor,
             RequestValidator requestValidator,
             NatsProperties natsProperties,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            MetricsFactory metricsFactory,
+            NatsPublishOptionsBuilder publishOptionsBuilder,
+            NatsEventPublisher eventPublisher) {
         
-        // Initialize specialized processors using Template Method pattern
+        // Initialize specialized processors using Template Method, Factory, Builder, and Observer patterns
         this.requestProcessor = new NatsRequestProcessor(
                 jetStream, requestLogService, payloadProcessor, 
-                requestValidator, natsProperties, meterRegistry);
+                requestValidator, natsProperties, meterRegistry, metricsFactory, publishOptionsBuilder, eventPublisher);
         
         this.publishProcessor = new NatsPublishProcessor(
                 jetStream, requestLogService, payloadProcessor,
-                requestValidator, natsProperties, meterRegistry);
+                requestValidator, natsProperties, meterRegistry, metricsFactory, publishOptionsBuilder, eventPublisher);
     }
     
     
