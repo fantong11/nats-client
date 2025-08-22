@@ -32,14 +32,16 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Enhanced NATS Message Service with improved error handling, metrics, and logging.
+ * Enhanced NATS Message Service with JetStream support, improved error handling, metrics, and logging.
  * 
  * Features:
+ * - JetStream-based messaging for durability and reliability
  * - Structured logging with MDC
  * - Metrics collection with Micrometer
  * - Retry mechanism for resilience
  * - Better exception handling
  * - Performance monitoring
+ * - Async processing model with JetStream
  */
 @Service
 @Primary
@@ -160,7 +162,8 @@ public class EnhancedNatsMessageService implements NatsMessageService {
             if (response != null) {
                 return handleSuccessfulResponse(requestId, response, startTime);
             } else {
-                return handleTimeoutResponse(requestId, startTime);
+                // JetStream async processing - message published successfully
+                return handleJetStreamAsyncProcessing(requestId, startTime);
             }
             
         } catch (Exception e) {
@@ -172,9 +175,22 @@ public class EnhancedNatsMessageService implements NatsMessageService {
         byte[] payloadBytes = payloadProcessor.toBytes(jsonPayload);
         Duration timeout = Duration.ofMillis(natsProperties.getRequest().getTimeout());
         
-        logger.debug("Sending NATS request with timeout: {}ms", timeout.toMillis());
+        logger.debug("Publishing message to JetStream with subject: {}", subject);
         
-        return natsConnection.request(subject, payloadBytes, timeout);
+        // Use JetStream for all message publishing to ensure durability and reliability
+        PublishOptions publishOptions = PublishOptions.builder()
+                .expectedStream(natsProperties.getJetStream().getStream().getDefaultName())
+                .build();
+        
+        PublishAck publishAck = jetStream.publish(subject, payloadBytes, publishOptions);
+        logger.debug("JetStream message published - Sequence: {}, Stream: {}", 
+                    publishAck.getSeqno(), publishAck.getStream());
+        
+        // For compatibility with request-response pattern, we simulate a response
+        // In a pure JetStream architecture, responses would come from consumers
+        // For now, we'll return null to indicate async processing
+        logger.info("Message published to JetStream successfully - transitioning to async processing model");
+        return null; // This will be handled as async processing
     }
     
     private CompletableFuture<String> handleSuccessfulResponse(String requestId, Message response, Instant startTime) {
@@ -194,6 +210,19 @@ public class EnhancedNatsMessageService implements NatsMessageService {
             logger.error("Error processing successful response", e);
             return handleRequestError(requestId, "response_processing", e, startTime);
         }
+    }
+    
+    private CompletableFuture<String> handleJetStreamAsyncProcessing(String requestId, Instant startTime) {
+        String successMessage = "Message published to JetStream successfully - processing asynchronously";
+        
+        requestLogService.updateWithSuccess(requestId, successMessage);
+        successCounter.increment();
+        
+        long duration = Duration.between(startTime, Instant.now()).toMillis();
+        logger.info("JetStream message published successfully in {}ms - async processing initiated", duration);
+        
+        // For JetStream async processing, we return a success response indicating the message was published
+        return CompletableFuture.completedFuture(successMessage);
     }
     
     private CompletableFuture<String> handleTimeoutResponse(String requestId, Instant startTime) {

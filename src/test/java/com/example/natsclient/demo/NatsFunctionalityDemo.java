@@ -27,6 +27,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+
+import com.example.natsclient.exception.NatsRequestException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -76,6 +79,14 @@ class NatsFunctionalityDemo {
         when(streamProperties.getDefaultName()).thenReturn("DEFAULT_STREAM");
         when(mockPublishAck.getSeqno()).thenReturn(1L);
         when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
+        
+        // Mock JetStream publish method
+        try {
+            when(jetStream.publish(anyString(), any(byte[].class), any(PublishOptions.class)))
+                    .thenReturn(mockPublishAck);
+        } catch (Exception e) {
+            // Handle checked exception
+        }
         
         // Setup for enhanced service
         when(meterRegistry.counter(anyString())).thenReturn(mock(Counter.class));
@@ -147,29 +158,24 @@ class NatsFunctionalityDemo {
         String serializedPayload = "{\"message\":\"Hello Enhanced NATS with Metrics!\"}";
         String responsePayload = "{\"status\":\"success\",\"echo\":\"Hello Enhanced NATS with Metrics!\",\"features\":[\"metrics\",\"retry\",\"logging\"]}";
         
-        // 設置 Mock 行為
+        // 設置 Mock 行為 - 使用 JetStream
         when(payloadProcessor.serialize(payload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(serializedPayload.getBytes());
-        when(payloadProcessor.fromBytes(any())).thenReturn(responsePayload);
         when(requestLogService.createRequestLog(anyString(), eq(subject), eq(serializedPayload), eq(correlationId)))
                 .thenReturn(new NatsRequestLog());
-        when(natsConnection.request(eq(subject), any(byte[].class), any(Duration.class)))
-                .thenReturn(mockMessage);
-        when(mockMessage.getData()).thenReturn(responsePayload.getBytes());
 
         // 執行請求
         CompletableFuture<String> result = enhancedService.sendRequest(subject, payload, correlationId);
         
-        // 驗證結果
+        // 驗證結果 - 期望 JetStream 異步響應
         assertNotNull(result);
-        assertEquals(responsePayload, result.get());
+        assertEquals("Message published to JetStream successfully - processing asynchronously", result.get());
         
         // 驗證基本調用
         verify(requestValidator).validateRequest(subject, payload);
         verify(requestValidator).validateCorrelationId(correlationId);
-        verify(natsConnection).request(eq(subject), any(byte[].class), any(Duration.class));
         verify(requestLogService).saveRequestLog(any(NatsRequestLog.class));
-        verify(requestLogService).updateWithSuccess(anyString(), eq(responsePayload));
+        verify(requestLogService).updateWithSuccess(anyString(), eq("Message published to JetStream successfully - processing asynchronously"));
         
         System.out.println("✅ 增強版服務測試通過!");
         System.out.println("   - 主題: " + subject);
@@ -243,10 +249,12 @@ class NatsFunctionalityDemo {
             originalService.sendRequest(invalidSubject, payload, "corr-123");
         });
         
-        // 增強版服務錯誤處理  
-        assertThrows(IllegalArgumentException.class, () -> {
-            enhancedService.sendRequest(invalidSubject, payload, "corr-123");
+        // 增強版服務錯誤處理（異步，需要在get()時檢查異常）
+        CompletableFuture<String> futureResult = enhancedService.sendRequest(invalidSubject, payload, "corr-123");
+        ExecutionException executionException = assertThrows(ExecutionException.class, () -> {
+            futureResult.get();
         });
+        assertTrue(executionException.getCause() instanceof NatsRequestException);
         
         System.out.println("✅ 錯誤處理測試通過!");
         System.out.println("   - 無效主題被正確拒絕");
