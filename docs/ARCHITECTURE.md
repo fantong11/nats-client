@@ -283,26 +283,300 @@ public class ExponentialBackoffRetryStrategy implements RetryStrategy {
 - 全局異常處理
 - 慢消費者檢測
 
-## 數據流程
+## 數據流程序列圖
 
-### 1. 請求處理流程
-```
-客戶端請求 → NatsController → NatsOrchestrationService → 
-NatsClientService → EnhancedNatsMessageService → 
-NatsRequestProcessor → JetStream → 目標服務
+### 1. 請求處理序列圖
+
+```mermaid
+sequenceDiagram
+    participant Client as 客戶端
+    participant Controller as NatsController
+    participant Orchestration as NatsOrchestrationService
+    participant ClientService as NatsClientService
+    participant Enhanced as EnhancedNatsMessageService
+    participant RequestProcessor as NatsRequestProcessor
+    participant Validator as RequestValidator
+    participant PayloadProcessor as PayloadProcessor
+    participant LogService as RequestLogService
+    participant EventPublisher as NatsEventPublisher
+    participant Observer as LoggingEventObserver
+    participant JetStream as JetStream
+    participant Database as Database
+    
+    Client->>Controller: POST /api/nats/request
+    Controller->>Controller: 驗證請求參數 (@Valid)
+    
+    Controller->>Orchestration: sendRequestWithTracking(request)
+    Orchestration->>Orchestration: generateCorrelationId()
+    Orchestration->>Orchestration: validateRequest(request)
+    
+    Orchestration->>ClientService: sendRequest(subject, payload, correlationId)
+    ClientService->>Enhanced: sendRequest(subject, payload, correlationId)
+    
+    Enhanced->>RequestProcessor: processMessage(subject, payload, correlationId)
+    
+    Note over RequestProcessor: Template Method Pattern 開始
+    RequestProcessor->>Validator: validateRequest(subject, payload)
+    RequestProcessor->>PayloadProcessor: serialize(payload)
+    RequestProcessor->>LogService: createRequestLog(requestId, subject, payload, correlationId)
+    LogService->>Database: save(requestLog)
+    
+    RequestProcessor->>EventPublisher: publishEvent(MessageStartedEvent)
+    EventPublisher->>Observer: onEvent(MessageStartedEvent)
+    
+    RequestProcessor->>JetStream: publish(subject, headers, payload, options)
+    JetStream-->>RequestProcessor: PublishAck
+    
+    RequestProcessor->>LogService: updateWithSuccess(requestId, response)
+    LogService->>Database: update(requestLog)
+    
+    RequestProcessor->>EventPublisher: publishEvent(MessageCompletedEvent)
+    EventPublisher->>Observer: onEvent(MessageCompletedEvent)
+    
+    RequestProcessor-->>Enhanced: CompletableFuture<String>
+    Enhanced-->>ClientService: CompletableFuture<String>
+    ClientService-->>Orchestration: CompletableFuture<String>
+    
+    Orchestration->>Orchestration: 處理響應和錯誤封裝
+    Orchestration-->>Controller: CompletableFuture<NatsRequestResponse>
+    Controller-->>Client: ResponseEntity<NatsRequestResponse>
 ```
 
-### 2. 發布處理流程
-```
-發布請求 → NatsController → NatsOrchestrationService → 
-NatsClientService → EnhancedNatsMessageService → 
-NatsPublishProcessor → JetStream → 消息隊列
+### 2. 發布處理序列圖
+
+```mermaid
+sequenceDiagram
+    participant Client as 客戶端
+    participant Controller as NatsController
+    participant Orchestration as NatsOrchestrationService
+    participant ClientService as NatsClientService
+    participant Enhanced as EnhancedNatsMessageService
+    participant PublishProcessor as NatsPublishProcessor
+    participant Validator as RequestValidator
+    participant PayloadProcessor as PayloadProcessor
+    participant Builder as NatsPublishOptionsBuilder
+    participant EventPublisher as NatsEventPublisher
+    participant JetStream as JetStream
+    
+    Client->>Controller: POST /api/nats/publish
+    Controller->>Controller: 驗證請求參數
+    
+    Controller->>Orchestration: publishMessageWithTracking(request)
+    Orchestration->>Orchestration: validatePublishRequest(request)
+    
+    Orchestration->>ClientService: publishMessage(subject, payload)
+    ClientService->>Enhanced: publishMessage(subject, payload)
+    
+    Enhanced->>PublishProcessor: processMessage(subject, payload, null)
+    
+    Note over PublishProcessor: Template Method Pattern
+    PublishProcessor->>Validator: validateRequest(subject, payload)
+    PublishProcessor->>PayloadProcessor: serialize(payload)
+    PublishProcessor->>Builder: createStandard()
+    
+    PublishProcessor->>EventPublisher: publishEvent(MessageStartedEvent)
+    
+    PublishProcessor->>JetStream: publish(subject, headers, payload, options)
+    JetStream-->>PublishProcessor: PublishAck
+    
+    PublishProcessor->>EventPublisher: publishEvent(MessageCompletedEvent)
+    
+    PublishProcessor-->>Enhanced: CompletableFuture<Void>
+    Enhanced-->>ClientService: CompletableFuture<Void>
+    ClientService-->>Orchestration: CompletableFuture<Void>
+    
+    Orchestration->>Orchestration: 生成requestId
+    Orchestration-->>Controller: CompletableFuture<String>
+    Controller->>Controller: 封裝響應對象
+    Controller-->>Client: ResponseEntity<NatsPublishResponse>
 ```
 
-### 3. 事件流程
+### 3. 錯誤處理序列圖
+
+```mermaid
+sequenceDiagram
+    participant Client as 客戶端
+    participant Controller as NatsController
+    participant Orchestration as NatsOrchestrationService
+    participant Enhanced as EnhancedNatsMessageService
+    participant Processor as NatsRequestProcessor
+    participant LogService as RequestLogService
+    participant EventPublisher as NatsEventPublisher
+    participant Observer as MetricsEventObserver
+    participant GlobalHandler as GlobalExceptionHandler
+    participant JetStream as JetStream
+    
+    Client->>Controller: POST /api/nats/request
+    Controller->>Orchestration: sendRequestWithTracking(request)
+    Orchestration->>Enhanced: sendRequest(subject, payload, correlationId)
+    Enhanced->>Processor: processMessage(subject, payload, correlationId)
+    
+    Processor->>JetStream: publish(subject, headers, payload, options)
+    JetStream-->>Processor: Exception (連接錯誤)
+    
+    Note over Processor: 錯誤處理開始
+    Processor->>LogService: updateWithError(requestId, errorMessage)
+    Processor->>EventPublisher: publishEvent(MessageFailedEvent)
+    EventPublisher->>Observer: onEvent(MessageFailedEvent)
+    Observer->>Observer: 更新失敗指標
+    
+    Processor-->>Enhanced: CompletableFuture.completeExceptionally(NatsRequestException)
+    Enhanced-->>Orchestration: Exception
+    
+    Orchestration->>Orchestration: exceptionally() 處理異常
+    Orchestration-->>Controller: NatsRequestResponse (success=false)
+    
+    alt 如果是未處理的異常
+        Controller-->>GlobalHandler: 異常拋出
+        GlobalHandler->>GlobalHandler: 記錄錯誤日誌
+        GlobalHandler-->>Client: ErrorResponse
+    else 正常錯誤響應
+        Controller-->>Client: ResponseEntity<NatsRequestResponse> (500)
+    end
 ```
-處理器操作 → NatsEventPublisher → 觀察者們 → 
-[日誌記錄, 指標收集, 自定義處理]
+
+### 4. 重試機制序列圖
+
+```mermaid
+sequenceDiagram
+    participant Scheduler as 定時任務
+    participant RetryService as RetryServiceImpl
+    participant Repository as NatsRequestLogRepository
+    participant RetryExecutor as RetryExecutor
+    participant StrategyFactory as RetryStrategyFactory
+    participant Strategy as ExponentialBackoffRetryStrategy
+    participant Enhanced as EnhancedNatsMessageService
+    participant EventPublisher as NatsEventPublisher
+    participant Database as Database
+    
+    Scheduler->>RetryService: retryFailedRequests() (定時觸發)
+    
+    RetryService->>Repository: findByStatusAndCreatedDateBefore(FAILED, cutoffTime)
+    Repository-->>RetryService: List<NatsRequestLog>
+    
+    loop 每個失敗的請求
+        RetryService->>RetryExecutor: executeRetry(requestLog)
+        
+        RetryExecutor->>StrategyFactory: createStrategy(EXPONENTIAL_BACKOFF)
+        StrategyFactory-->>RetryExecutor: ExponentialBackoffRetryStrategy
+        
+        RetryExecutor->>Strategy: canRetry(attemptCount, maxAttempts)
+        Strategy-->>RetryExecutor: true/false
+        
+        alt 可以重試
+            RetryExecutor->>Strategy: calculateDelay(attemptCount)
+            Strategy-->>RetryExecutor: delayMs
+            
+            RetryExecutor->>RetryExecutor: Thread.sleep(delayMs)
+            
+            RetryExecutor->>Enhanced: sendRequest(subject, payload, correlationId)
+            
+            alt 重試成功
+                Enhanced-->>RetryExecutor: 成功響應
+                RetryExecutor->>Repository: updateStatus(requestId, SUCCESS)
+                RetryExecutor->>EventPublisher: publishEvent(MessageCompletedEvent)
+            else 重試失敗
+                Enhanced-->>RetryExecutor: 異常
+                RetryExecutor->>Repository: incrementRetryCount(requestId)
+                RetryExecutor->>EventPublisher: publishEvent(MessageRetryEvent)
+            end
+            
+        else 超過最大重試次數
+            RetryExecutor->>Repository: updateStatus(requestId, MAX_RETRIES_EXCEEDED)
+            RetryExecutor->>EventPublisher: publishEvent(MessageFailedEvent)
+        end
+        
+        Repository->>Database: 更新請求狀態
+    end
+```
+
+### 5. 觀察者模式事件流程圖
+
+```mermaid
+sequenceDiagram
+    participant Processor as AbstractNatsMessageProcessor
+    participant EventPublisher as NatsEventPublisher
+    participant LoggingObserver as LoggingEventObserver
+    participant MetricsObserver as MetricsEventObserver
+    participant CustomObserver as 自定義觀察者
+    participant MeterRegistry as MeterRegistry
+    participant Logger as Logger
+    
+    Note over Processor: 消息處理過程中
+    
+    Processor->>EventPublisher: publishEvent(MessageStartedEvent)
+    
+    Note over EventPublisher: 異步通知所有觀察者
+    par 並行通知觀察者
+        EventPublisher->>LoggingObserver: onEvent(MessageStartedEvent)
+        LoggingObserver->>Logger: info("Message processing started: {}", event.getRequestId())
+    and
+        EventPublisher->>MetricsObserver: onEvent(MessageStartedEvent)
+        MetricsObserver->>MeterRegistry: counter.increment("nats.message.started")
+    and
+        EventPublisher->>CustomObserver: onEvent(MessageStartedEvent)
+        CustomObserver->>CustomObserver: 自定義處理邏輯
+    end
+    
+    Note over Processor: 處理完成
+    
+    Processor->>EventPublisher: publishEvent(MessageCompletedEvent)
+    
+    par 並行通知觀察者
+        EventPublisher->>LoggingObserver: onEvent(MessageCompletedEvent)
+        LoggingObserver->>Logger: info("Message processing completed: {}", event.getRequestId())
+    and
+        EventPublisher->>MetricsObserver: onEvent(MessageCompletedEvent)
+        MetricsObserver->>MeterRegistry: timer.record(duration)
+        MetricsObserver->>MeterRegistry: counter.increment("nats.message.success")
+    and
+        EventPublisher->>CustomObserver: onEvent(MessageCompletedEvent)
+        CustomObserver->>CustomObserver: 自定義完成處理
+    end
+```
+
+### 6. 系統初始化序列圖
+
+```mermaid
+sequenceDiagram
+    participant SpringBoot as Spring Boot Application
+    participant NatsConfig as NatsConfig
+    participant VaultService as K8sCredentialServiceImpl
+    participant Vault as HashiCorp Vault
+    participant NatsConnection as NATS Connection
+    participant JetStreamMgmt as JetStreamManagement
+    participant ObserverConfig as ObserverConfiguration
+    participant EventPublisher as NatsEventPublisher
+    participant Observers as Event Observers
+    
+    SpringBoot->>NatsConfig: @Bean natsConnection()
+    NatsConfig->>VaultService: loadNatsCredentials()
+    VaultService->>Vault: 獲取NATS認證信息
+    Vault-->>VaultService: NatsCredentials
+    VaultService-->>NatsConfig: NatsCredentials
+    
+    NatsConfig->>NatsConfig: 構建Options (URL, 認證, 超時等)
+    NatsConfig->>NatsConnection: Nats.connect(options)
+    NatsConnection-->>NatsConfig: Connection
+    
+    SpringBoot->>NatsConfig: @Bean jetStreamManagement()
+    NatsConfig->>NatsConnection: jetStreamManagement()
+    NatsConnection-->>NatsConfig: JetStreamManagement
+    NatsConfig->>JetStreamMgmt: createDefaultStreamIfNotExists()
+    
+    SpringBoot->>NatsConfig: @Bean jetStream()
+    NatsConfig->>NatsConnection: jetStream(jsOptions)
+    NatsConnection-->>NatsConfig: JetStream
+    
+    SpringBoot->>ObserverConfig: @Bean eventPublisher()
+    SpringBoot->>ObserverConfig: @Bean loggingObserver()
+    SpringBoot->>ObserverConfig: @Bean metricsObserver()
+    
+    ObserverConfig->>EventPublisher: registerObserver(loggingObserver)
+    ObserverConfig->>EventPublisher: registerObserver(metricsObserver)
+    EventPublisher->>Observers: onRegistered()
+    
+    Note over SpringBoot: 系統初始化完成，準備處理請求
 ```
 
 ## 配置要點
