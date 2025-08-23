@@ -1,6 +1,6 @@
-# Development Setup Guide
+# Enhanced NATS Client Development Setup Guide
 
-Complete guide for setting up the local development environment for the NATS Client Service.
+Complete guide for setting up the local development environment for the Enhanced NATS Client Service with Template Method, Observer, and Factory design patterns.
 
 ## 📋 Table of Contents
 

@@ -93,9 +93,11 @@ class NatsFunctionalityDemo {
         lenient().when(mockPublishAck.getSeqno()).thenReturn(1L);
         lenient().when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
         
-        // Mock JetStream publish method
+        // Mock JetStream publish method - both 3 and 4 parameter versions
         try {
             lenient().when(jetStream.publish(anyString(), any(byte[].class), any(PublishOptions.class)))
+                    .thenReturn(mockPublishAck);
+            lenient().when(jetStream.publish(anyString(), any(), any(byte[].class), any(PublishOptions.class)))
                     .thenReturn(mockPublishAck);
         } catch (Exception e) {
             // Handle checked exception
@@ -228,6 +230,8 @@ class NatsFunctionalityDemo {
         try {
             when(jetStream.publish(eq(subject), any(byte[].class), any(PublishOptions.class)))
                     .thenReturn(mockPublishAck);
+            when(jetStream.publish(eq(subject), any(), any(byte[].class), any(PublishOptions.class)))
+                    .thenReturn(mockPublishAck);
         } catch (Exception e) {
             // Ignore for test setup
         }
@@ -245,7 +249,8 @@ class NatsFunctionalityDemo {
         // 驗證調用
         verify(requestValidator, times(2)).validateRequest(subject, payload);
         try {
-            verify(jetStream, times(2)).publish(eq(subject), any(byte[].class), any(PublishOptions.class));
+            verify(jetStream, times(1)).publish(eq(subject), any(byte[].class), any(PublishOptions.class));
+            verify(jetStream, times(1)).publish(eq(subject), any(), any(byte[].class), any(PublishOptions.class));
         } catch (Exception e) {
             // Ignore verification exceptions
         }

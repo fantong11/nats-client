@@ -125,9 +125,9 @@ class EnhancedNatsMessageServiceTest {
         lenient().when(mockPublishAck.getSeqno()).thenReturn(1L);
         lenient().when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
         
-        // Mock JetStream.publish method
+        // Mock JetStream.publish method - fix the signature to match actual usage (subject, headers, payloadBytes, publishOptions)
         try {
-            lenient().when(jetStream.publish(anyString(), any(byte[].class), any(PublishOptions.class)))
+            lenient().when(jetStream.publish(anyString(), any(), any(byte[].class), any(PublishOptions.class)))
                     .thenReturn(mockPublishAck);
         } catch (Exception e) {
             // This shouldn't happen in tests, but we need to handle checked exceptions
@@ -184,9 +184,9 @@ class EnhancedNatsMessageServiceTest {
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), eq(testCorrelationId)))
                 .thenReturn(mockRequestLog);
         
-        // Mock JetStream publish to throw exception
+        // Mock JetStream publish to throw exception (fix signature)
         try {
-            when(jetStream.publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class)))
+            when(jetStream.publish(eq(testSubject), any(), eq(payloadBytes), any(PublishOptions.class)))
                     .thenThrow(new RuntimeException("JetStream failure"));
         } catch (Exception e) {
             // Handle checked exception
@@ -237,9 +237,9 @@ class EnhancedNatsMessageServiceTest {
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), eq(testCorrelationId)))
                 .thenReturn(new NatsRequestLog());
         
-        // Mock JetStream publish to throw exception for retry testing
+        // Mock JetStream publish to throw exception for retry testing (fix signature)
         try {
-            when(jetStream.publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class)))
+            when(jetStream.publish(eq(testSubject), any(), eq(payloadBytes), any(PublishOptions.class)))
                     .thenThrow(new RuntimeException("JetStream publish failed"));
         } catch (Exception e) {
             // Handle checked exception
@@ -257,9 +257,9 @@ class EnhancedNatsMessageServiceTest {
             }
         });
 
-        // Verify that JetStream publish was attempted
+        // Verify that JetStream publish was attempted (fix signature)
         try {
-            verify(jetStream, times(1)).publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class));
+            verify(jetStream, times(1)).publish(eq(testSubject), any(), eq(payloadBytes), any(PublishOptions.class));
         } catch (Exception e) {
             // Handle checked exception in verification
         }
@@ -272,7 +272,7 @@ class EnhancedNatsMessageServiceTest {
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), isNull()))
                 .thenReturn(mockRequestLog);
-        when(jetStream.publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class)))
+        when(jetStream.publish(eq(testSubject), any(), eq(payloadBytes), any(PublishOptions.class)))
                 .thenReturn(mockPublishAck);
 
         CompletableFuture<Void> result = enhancedService.publishMessage(testSubject, testPayload);
@@ -281,7 +281,7 @@ class EnhancedNatsMessageServiceTest {
         assertDoesNotThrow(() -> result.get());
         
         try {
-            verify(jetStream).publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class));
+            verify(jetStream).publish(eq(testSubject), any(), eq(payloadBytes), any(PublishOptions.class));
         } catch (Exception e) {
             // Ignore verification exceptions
         }
@@ -412,10 +412,13 @@ class EnhancedNatsMessageServiceTest {
 
     @Test
     void publishMessage_ExceptionHandling_ShouldLogAndUpdateDatabase() throws Exception {
+        NatsRequestLog mockRequestLog = new NatsRequestLog();
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
+        lenient().when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), isNull()))
+                .thenReturn(mockRequestLog);
         doThrow(new RuntimeException("JetStream publish failed")).when(jetStream)
-                .publish(eq(testSubject), eq(payloadBytes), any(PublishOptions.class));
+                .publish(eq(testSubject), any(), eq(payloadBytes), any(PublishOptions.class));
 
         assertThrows(NatsRequestException.class, () -> {
             try {

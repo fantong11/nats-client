@@ -150,7 +150,7 @@ public class NatsIntegrationTest {
         when(mockPublishAck.getSeqno()).thenReturn(1L);
         when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
         try {
-            when(jetStream.publish(eq("integration.publish"), any(byte[].class), any(PublishOptions.class)))
+            when(jetStream.publish(eq("integration.publish"), any(), any(byte[].class), any(PublishOptions.class)))
                     .thenReturn(mockPublishAck);
         } catch (Exception e) {
             // Ignore for test setup

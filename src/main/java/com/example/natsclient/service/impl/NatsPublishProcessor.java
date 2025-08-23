@@ -9,10 +9,12 @@ import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
 import com.example.natsclient.service.factory.MetricsFactory;
 import com.example.natsclient.service.observer.NatsEventPublisher;
 import com.example.natsclient.service.validator.RequestValidator;
+import com.example.natsclient.util.NatsMessageHeaders;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.nats.client.JetStream;
 import io.nats.client.PublishOptions;
 import io.nats.client.api.PublishAck;
+import io.nats.client.impl.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,8 +58,8 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
             // Serialize payload
             String jsonPayload = payloadProcessor.serialize(payload);
             
-            // Publish to JetStream
-            PublishAck publishAck = publishToJetStream(subject, jsonPayload);
+            // Publish to JetStream with correlation ID as message ID
+            PublishAck publishAck = publishToJetStream(subject, jsonPayload, correlationId);
             
             // Create and save request log with success status
             NatsRequestLog requestLog = createSuccessfulRequestLog(requestId, subject, jsonPayload, publishAck);
@@ -80,16 +82,22 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
     /**
      * Publish message to JetStream using Builder pattern for PublishOptions.
      */
-    private PublishAck publishToJetStream(String subject, String jsonPayload) throws Exception {
+    private PublishAck publishToJetStream(String subject, String jsonPayload, String correlationId) throws Exception {
         logger.debug("Publishing message to JetStream with subject: {}", subject);
+        
+        // Use correlation ID as message ID for deduplication
+        String messageId = correlationId != null ? correlationId : NatsMessageHeaders.generateMessageId("pub");
+        
+        // Create headers with message ID
+        Headers headers = NatsMessageHeaders.createHeadersWithMessageId(messageId);
         
         // Use Builder pattern for flexible PublishOptions configuration
         PublishOptions publishOptions = publishOptionsBuilder.createDefault();
         
-        PublishAck publishAck = jetStream.publish(subject, payloadProcessor.toBytes(jsonPayload), publishOptions);
+        PublishAck publishAck = jetStream.publish(subject, headers, payloadProcessor.toBytes(jsonPayload), publishOptions);
         
-        logger.debug("JetStream message published - {}", 
-                    publishOptionsBuilder.formatPublishAck(publishAck));
+        logger.debug("JetStream message published with ID '{}' - {}", 
+                    messageId, publishOptionsBuilder.formatPublishAck(publishAck));
         
         return publishAck;
     }

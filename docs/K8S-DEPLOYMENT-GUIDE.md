@@ -1,6 +1,6 @@
-# Kubernetes 部署實戰指南 (JetStream 版本)
+# Kubernetes 部署實戰指南 (Enhanced NATS 版本)
 
-本指南記錄了 NATS Client Service 在 Kubernetes 環境中的實際部署、測試流程和最佳實踐。此版本包含完整的 JetStream 支援，提供持久化訊息存儲和增強的可靠性。
+本指南記錄了 NATS Client Service 在 Kubernetes 環境中的實際部署、測試流程和最佳實踐。此版本使用 Enhanced NATS Message Service 和 Template Method 設計模式，提供企業級的 JetStream 支援、完整的監控指標和可靠的訊息處理。
 
 ## 📋 目錄
 
@@ -123,7 +123,7 @@ kubectl logs -f deployment/nats-client-app
 ### 1. 內部測試 (推薦)
 由於網路配置可能複雜，建議先從集群內部測試：
 
-#### 測試 Publish API
+#### 測試 Publish API (Enhanced Service)
 ```bash
 # 進入應用容器測試 publish
 kubectl exec deployment/nats-client-app -- \
@@ -132,42 +132,40 @@ curl -X POST http://localhost:8080/api/nats/publish \
 -d '{
   "subject": "test.publish",
   "payload": {
-    "message": "Hello from K8s",
-    "timestamp": "'$(date -Iseconds)'"
+    "message": "Hello from K8s Enhanced NATS",
+    "timestamp": "'$(date -Iseconds)'",
+    "processingMode": "JetStream"
   }
 }'
 
-# 期望回應:
-# {
-#   "requestId": "uuid-123",
-#   "status": "PUBLISHED",
-#   "trackingUrl": "/api/nats/status/uuid-123",
-#   ...
-# }
+# 期望回應 (Enhanced Service 使用 JetStream):
+# Message published successfully
 ```
 
-#### 測試 Request API
+#### 測試 Request API (Enhanced Service with Template Method)
 ```bash
-# 測試有回應的 subject (test.echo)
+# 測試 Enhanced NATS 請求 (通過 NatsRequestProcessor)
 kubectl exec deployment/nats-client-app -- \
 curl -X POST http://localhost:8080/api/nats/request \
 -H "Content-Type: application/json" \
 -d '{
-  "subject": "test.echo",
+  "subject": "test.k8s",
   "payload": {
-    "message": "Hello Echo Test from K8s",
-    "requestId": "k8s-test-001"
-  }
+    "message": "Hello Enhanced NATS from K8s",
+    "requestId": "k8s-test-001",
+    "processingMode": "Template Method Pattern"
+  },
+  "correlationId": "K8S-TEST-001"
 }'
 
-# 期望成功回應:
+# 期望回應 (可能會超時因為沒有訂閱者):
 # {
-#   "correlationId": "CORR-xxx",
-#   "subject": "test.echo",
-#   "success": true,
-#   "responsePayload": {...},
-#   "errorMessage": null,
-#   "timestamp": "..."
+#   "correlationId": "K8S-TEST-001",
+#   "subject": "test.k8s",
+#   "success": false,
+#   "responsePayload": null,
+#   "errorMessage": "com.example.natsclient.exception.NatsTimeoutException: No response received within timeout period",
+#   "timestamp": "2025-08-23T07:04:26.718973818"
 # }
 ```
 
@@ -221,93 +219,110 @@ curl -X POST http://localhost:8080/api/nats/request \
 kill %1
 ```
 
-### 3. 健康檢查測試
+### 3. 健康檢查測試 (Spring Boot Actuator)
 ```bash
-# 檢查應用健康狀態
+# 檢查應用健康狀態 (主要健康端點)
 kubectl exec deployment/nats-client-app -- \
 curl http://localhost:8080/actuator/health
 
-# 檢查 NATS 特定健康檢查
+# 檢查 Kubernetes liveness 探測
 kubectl exec deployment/nats-client-app -- \
-curl http://localhost:8080/api/nats/health
+curl http://localhost:8080/actuator/health/liveness
+
+# 檢查 Kubernetes readiness 探測
+kubectl exec deployment/nats-client-app -- \
+curl http://localhost:8080/actuator/health/readiness
+
+# 期望回應:
+# {"status":"UP","groups":["liveness","readiness"]}
 ```
 
-### 4. 效能測試
+### 4. 效能和監控測試 (Enhanced Metrics)
 ```bash
 # 檢查資源使用情況
 kubectl top pods
 
-# 查看應用統計資訊
+# 查看 Enhanced NATS 統計資訊 (Micrometer 指標)
 kubectl exec deployment/nats-client-app -- \
 curl http://localhost:8080/api/nats/statistics
-```
 
-## 🚀 JetStream 功能測試
-
-### 1. JetStream 發布測試
-```bash
-# 測試 JetStream 發布功能
-kubectl exec deployment/nats-client-app -- \
-curl -X POST http://localhost:8080/api/nats/jetstream/publish \
--H "Content-Type: application/json" \
--d '{
-  "subject": "jetstream.test.publish",
-  "streamName": "K8S_STREAM", 
-  "payload": {
-    "message": "Hello JetStream from K8s",
-    "timestamp": "'$(date -Iseconds)'"
-  }
-}'
-
-# 期望回應包含 PublishAck 資訊:
+# 期望回應:
 # {
-#   "requestId": "uuid-123",
-#   "subject": "jetstream.test.publish",
-#   "streamName": "K8S_STREAM",
-#   "sequenceNumber": 1,
-#   "success": true,
-#   "timestamp": "..."
+#   "totalRequests": 34,
+#   "pendingRequests": 0,
+#   "successfulRequests": 29,
+#   "failedRequests": 0,
+#   "timeoutRequests": 5,
+#   "errorRequests": 0,
+#   "successRate": 85.29411764705883
 # }
-```
 
-### 2. JetStream 請求/回應測試
-```bash
-# 測試 JetStream 增強的請求/回應
+# 檢查特定請求狀態
 kubectl exec deployment/nats-client-app -- \
-curl -X POST http://localhost:8080/api/nats/jetstream/request \
--H "Content-Type: application/json" \
--d '{
-  "subject": "jetstream.test.echo",
-  "payload": {
-    "message": "JetStream Echo Test",
-    "requestId": "js-k8s-test-001"
-  }
-}'
-
-# JetStream 提供更可靠的訊息傳遞保證
+curl http://localhost:8080/api/nats/status/K8S-TEST-001
 ```
 
-### 3. JetStream vs NATS Core 比較測試
+## 🚀 Enhanced NATS Architecture 功能測試
+
+### 1. Template Method Pattern 測試
+Enhanced NATS Message Service 使用 Template Method 模式，自動選擇適當的處理器：
+
 ```bash
-# 1. 傳統 NATS Core publish
+# 測試發布操作 (使用 NatsPublishProcessor + JetStream)
 kubectl exec deployment/nats-client-app -- \
 curl -X POST http://localhost:8080/api/nats/publish \
 -H "Content-Type: application/json" \
--d '{"subject": "core.test", "payload": {"message": "NATS Core"}}'
-
-# 2. JetStream publish (提供 ACK 和持久性)
-kubectl exec deployment/nats-client-app -- \
-curl -X POST http://localhost:8080/api/nats/jetstream/publish \
--H "Content-Type: application/json" \
 -d '{
-  "subject": "jetstream.test", 
-  "streamName": "K8S_STREAM",
-  "payload": {"message": "JetStream with persistence"}
+  "subject": "enhanced.jetstream.publish",
+  "payload": {
+    "message": "Enhanced NATS with JetStream from K8s",
+    "timestamp": "'$(date -Iseconds)'",
+    "architecture": "Template Method + JetStream"
+  }
 }'
 
-# 比較回應差異：
-# - NATS Core: 簡單的成功/失敗狀態
-# - JetStream: 包含 sequence number, stream name, 和 ACK 確認
+# Enhanced Service 自動使用 JetStream 進行可靠發布
+# 期望回應: "Message published successfully"
+```
+
+### 2. 雙重架構測試 (Hybrid Operations)
+Enhanced Service 使用智能路由：NATS Core 用於請求-回應，JetStream 用於發布操作
+
+```bash
+# 請求操作 (使用 NatsRequestProcessor + JetStream)
+kubectl exec deployment/nats-client-app -- \
+curl -X POST http://localhost:8080/api/nats/request \
+-H "Content-Type: application/json" \
+-d '{
+  "subject": "enhanced.hybrid.request",
+  "payload": {
+    "message": "Hybrid Architecture Test",
+    "requestType": "JetStream Request"
+  },
+  "correlationId": "HYBRID-K8S-001"
+}'
+
+# Enhanced Service 通過 Template Method 自動處理
+```
+
+### 3. 監控指標驗證 (Micrometer Integration)
+```bash
+# 執行幾個測試請求來生成指標數據
+for i in {1..5}; do
+  kubectl exec deployment/nats-client-app -- \
+  curl -s -X POST http://localhost:8080/api/nats/publish \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "metrics.test.'${i}'",
+    "payload": {"test": "metrics generation", "iteration": '${i}'}
+  }' > /dev/null
+done
+
+# 查看累積的指標數據
+kubectl exec deployment/nats-client-app -- \
+curl -s http://localhost:8080/api/nats/statistics
+
+# 應該顯示增加的請求計數和成功率更新
 ```
 
 ### 4. 檢查 JetStream 狀態
@@ -462,61 +477,103 @@ kubectl delete service nats-client-external
 kubectl delete pod -l app=nats-client-app
 ```
 
-## 📝 部署檢查清單
+## 📝 Enhanced NATS 部署檢查清單
 
 部署前確認：
-- [ ] Docker 鏡像已構建並加載到集群
+- [ ] Docker 鏡像已構建並加載到集群 (`nats-client:latest`)
 - [ ] Kubernetes 集群資源足夠 (至少 8GB RAM)
 - [ ] kubectl 能正常連接到集群
+- [ ] Maven 編譯成功 (`mvn clean compile -DskipTests`)
 
 部署後驗證：
-- [ ] 所有 Pod 都是 Running 狀態
-- [ ] NATS Server 連接成功 
-- [ ] Oracle Database 完全啟動
-- [ ] 應用程式健康檢查通過
-- [ ] Publish API 測試成功
-- [ ] Request/Response API 測試成功
-- [ ] 超時處理測試正常
+- [ ] 所有 Pod 都是 Running 狀態 (nats-client-app, nats-server, oracle-db)
+- [ ] NATS Server JetStream 功能啟用
+- [ ] Oracle Database 完全啟動並可連接
+- [ ] Spring Boot Actuator 健康檢查通過 (`/actuator/health`)
+- [ ] Enhanced NATS Publish API 測試成功 (JetStream 後端)
+- [ ] Enhanced NATS Request API 測試成功 (Template Method 處理)
+- [ ] 超時處理和錯誤處理正常工作
+- [ ] Micrometer 指標收集正常 (`/api/nats/statistics`)
+
+Enhanced Features 驗證：
+- [ ] Template Method Pattern 正確路由請求到對應處理器
+- [ ] Observer Pattern 事件發布功能正常
+- [ ] Factory Pattern 指標創建和管理正常
+- [ ] 數據庫審計日誌記錄完整
+- [ ] 關聯 ID 追蹤功能正常
 
 ## 🎯 測試結果範例
 
-### 成功的 Request API 回應
+### Enhanced NATS Request API 回應範例
+
+#### 成功的 JetStream 處理回應 (Template Method)
 ```json
 {
   "correlationId": "CORR-6515a0cc-32b0-43e1-bf9f-88c1d7b5d7ae",
-  "subject": "test.echo",
+  "subject": "test.k8s",
   "success": true,
-  "responsePayload": {
-    "original_payload": "{\"message\":\"Hello Echo Test from K8s\",\"requestId\":\"k8s-test-001\"}",
-    "processed_by": "nats-test-subscriber",
-    "message": "Echo response",
-    "status": "success",
-    "timestamp": "2025-08-21T17:22:32.495810522"
-  },
+  "responsePayload": "Message published to JetStream successfully - processing asynchronously",
   "errorMessage": null,
-  "timestamp": "2025-08-21T17:22:32.504295144"
+  "timestamp": "2025-08-23T07:04:26.718973818"
 }
 ```
 
-### 超時的 Request API 回應
+#### 超時的 Enhanced NATS 回應
 ```json
 {
   "correlationId": "CORR-190b92f4-a98a-4648-a042-f10bd1d1bcdb",
-  "subject": "test.request",
+  "subject": "test.k8s",
   "success": false,
   "responsePayload": null,
   "errorMessage": "com.example.natsclient.exception.NatsTimeoutException: No response received within timeout period",
-  "timestamp": "2025-08-21T17:22:02.672436672"
+  "timestamp": "2025-08-23T07:04:26.718973818"
 }
 ```
 
-## 💡 最佳實踐
+#### Enhanced NATS 統計回應範例
+```json
+{
+  "totalRequests": 34,
+  "pendingRequests": 0,
+  "successfulRequests": 29,
+  "failedRequests": 0,
+  "timeoutRequests": 5,
+  "errorRequests": 0,
+  "successRate": 85.29411764705883
+}
+```
 
+## 💡 Enhanced NATS 最佳實踐
+
+### 架構設計最佳實踐
+1. **Template Method Pattern**: Enhanced Service 使用專用處理器 (NatsRequestProcessor, NatsPublishProcessor) 確保責任分離
+2. **Observer Pattern**: 事件驅動架構通過 NatsEventPublisher 實現松耦合監控
+3. **Factory Pattern**: MetricsFactory 集中管理 Micrometer 指標創建和配置
+4. **雙重操作模式**: 智能路由使用 NATS Core 處理請求-回應，JetStream 處理發布操作
+
+### 運維最佳實踐
 1. **資源管理**: 所有容器都設定了適當的 resource limits 和 requests
-2. **健康檢查**: 使用 livenessProbe 和 readinessProbe 確保服務健康
-3. **依賴順序**: Init containers 確保依賴服務先啟動
-4. **日誌管理**: 集中化日誌收集便於問題診斷
-5. **監控指標**: 暴露 Prometheus metrics 用於監控
-6. **優雅關閉**: 正確處理 SIGTERM 信號以實現零停機部署
+2. **健康檢查**: 使用 Spring Boot Actuator 的 liveness 和 readiness 探測
+3. **依賴順序**: Init containers 確保 NATS 和 Oracle DB 先啟動
+4. **監控指標**: Micrometer 集成提供實時性能指標和成功率統計
+5. **優雅關閉**: 正確處理 SIGTERM 信號以實現零停機部署
+6. **關聯追蹤**: 自動生成和管理關聯 ID 用於端到端追蹤
 
-這份指南基於實際部署經驗，提供了從構建到測試的完整流程，確保 NATS Client Service 能在 Kubernetes 環境中穩定運行。
+### 測試最佳實踐
+1. **分層測試**: 單元測試 (100+ 測試案例) + 集成測試 + 性能測試
+2. **壓力測試**: 內建並發請求處理驗證和記憶體洩漏檢測
+3. **監控驗證**: 確認指標收集、成功率計算和錯誤追蹤正常工作
+4. **容器內測試**: 優先使用 `kubectl exec` 進行內部測試以避免網路問題
+
+### 生產部署建議
+1. **數據持久化**: Oracle DB 使用 PVC 確保數據持久性
+2. **JetStream 配置**: 確保 NATS Server 正確配置 JetStream 功能
+3. **指標監控**: 集成 Prometheus 收集 Micrometer 指標
+4. **日誌集中化**: 使用 ELK Stack 或類似工具收集應用日誌
+
+---
+
+這份指南基於 **Enhanced NATS Message Service** 的實際部署經驗，包含 Template Method、Observer 和 Factory 設計模式的最佳實踐，確保企業級 NATS Client Service 能在 Kubernetes 環境中穩定高效運行。
+
+**版本**: Enhanced NATS v0.0.1-SNAPSHOT (2025年8月)  
+**架構**: Template Method + Observer + Factory Patterns + JetStream Integration

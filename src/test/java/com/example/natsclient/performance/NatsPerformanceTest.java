@@ -136,7 +136,8 @@ class NatsPerformanceTest {
         try {
             lenient().when(natsConnection.request(anyString(), any(byte[].class), any(Duration.class)))
                     .thenReturn(mockMessage);
-            when(jetStream.publish(anyString(), any(byte[].class), any(PublishOptions.class)))
+            // Fix the jetStream.publish mock to match the actual method signature (subject, headers, payloadBytes, publishOptions)
+            when(jetStream.publish(anyString(), any(), any(byte[].class), any(PublishOptions.class)))
                     .thenReturn(mockPublishAck);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

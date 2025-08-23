@@ -9,11 +9,13 @@ import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
 import com.example.natsclient.service.factory.MetricsFactory;
 import com.example.natsclient.service.observer.NatsEventPublisher;
 import com.example.natsclient.service.validator.RequestValidator;
+import com.example.natsclient.util.NatsMessageHeaders;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.nats.client.JetStream;
 import io.nats.client.Message;
 import io.nats.client.PublishOptions;
 import io.nats.client.api.PublishAck;
+import io.nats.client.impl.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,8 +65,8 @@ public class NatsRequestProcessor extends AbstractNatsMessageProcessor<String> {
             
             logger.debug("Request logged to database, sending to JetStream");
             
-            // Send to JetStream
-            Message response = sendJetStreamRequest(subject, jsonPayload);
+            // Send to JetStream with correlation ID as message ID
+            Message response = sendJetStreamRequest(subject, jsonPayload, correlationId);
             
             if (response != null) {
                 return handleSynchronousResponse(requestId, response, startTime);
@@ -81,17 +83,23 @@ public class NatsRequestProcessor extends AbstractNatsMessageProcessor<String> {
     /**
      * Send request to JetStream for reliable, durable processing using Builder pattern.
      */
-    private Message sendJetStreamRequest(String subject, String jsonPayload) throws Exception {
+    private Message sendJetStreamRequest(String subject, String jsonPayload, String correlationId) throws Exception {
         byte[] payloadBytes = payloadProcessor.toBytes(jsonPayload);
         
         logger.debug("Publishing request message to JetStream with subject: {}", subject);
         
+        // Use correlation ID as message ID for deduplication
+        String messageId = correlationId != null ? correlationId : NatsMessageHeaders.generateMessageId("req");
+        
+        // Create headers with message ID
+        Headers headers = NatsMessageHeaders.createHeadersWithMessageId(messageId);
+        
         // Use Builder pattern for critical request operations
         PublishOptions publishOptions = publishOptionsBuilder.createCritical();
         
-        PublishAck publishAck = jetStream.publish(subject, payloadBytes, publishOptions);
-        logger.debug("JetStream request message published - {}", 
-                    publishOptionsBuilder.formatPublishAck(publishAck));
+        PublishAck publishAck = jetStream.publish(subject, headers, payloadBytes, publishOptions);
+        logger.debug("JetStream request message published with ID '{}' - {}", 
+                    messageId, publishOptionsBuilder.formatPublishAck(publishAck));
         
         // In JetStream architecture, responses come asynchronously through consumers
         // Return null to indicate async processing

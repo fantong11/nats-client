@@ -1,6 +1,6 @@
-# 專案結構說明
+# Enhanced NATS Client 專案結構說明
 
-本文件詳細說明 NATS Client Service 專案的資料夾結構和組織方式。
+本文件詳細說明 Enhanced NATS Client Service 專案的資料夾結構和組織方式。此版本使用 Template Method、Observer 和 Factory 設計模式，提供企業級的 NATS 訊息處理能力。
 
 ## 📁 根目錄結構
 
@@ -116,31 +116,50 @@ src/main/java/com/example/natsclient/
 ##### `repository/` - 資料存取層
 - **NatsRequestLogRepository.java**: 請求記錄的 JPA 存取庫
 
-##### `service/` - 業務邏輯層
+##### `service/` - 業務邏輯層 (Enhanced Architecture)
 ```
 service/
 ├── 📄 NatsClientService.java           # 主要 NATS 客戶端介面
 ├── 📄 NatsMessageService.java          # 訊息處理介面
+├── 📄 NatsOperations.java              # NATS 操作抽象介面
 ├── 📄 NatsOrchestrationService.java    # 請求編排服務
-├── 📄 NatsResponseHandler.java         # 回應處理
-├── 📄 NatsTestSubscriber.java          # 測試訊息訂閱器
 ├── 📄 PayloadProcessor.java            # 載荷處理介面
 ├── 📄 RequestLogService.java           # 請求記錄介面
-├── 📄 RetryService.java                # 重試邏輯介面
-├── 📁 impl/                            # 服務實作
+├── 📄 ResponseHandler.java             # 回應處理介面
+├── 📁 builder/                         # 建造者模式
+├── 📁 factory/                         # 工廠模式 (Metrics)
+├── 📁 impl/                            # 服務實作 (Enhanced)
+├── 📁 observer/                        # 觀察者模式 (Events)
 └── 📁 validator/                       # 請求驗證
 ```
 
-###### 服務實作 (`service/impl/`)
-- **EnhancedNatsMessageService.java**: 進階 NATS 訊息功能
+###### 建造者模式 (`service/builder/`)
+- **NatsPublishOptionsBuilder.java**: JetStream 發布選項建造者
+
+###### 工廠模式 (`service/factory/`)
+- **MetricsFactory.java**: Micrometer 指標工廠
+- **MetricsFactory.NatsMetricsSet.java**: 指標集合封裝
+
+###### 服務實作 (`service/impl/`) - Enhanced Architecture
+- **AbstractNatsMessageProcessor.java**: Template Method 基礎處理器
+- **EnhancedNatsMessageService.java**: 企業級 NATS 訊息服務 (主要服務)
+- **HybridNatsOperations.java**: 雙模式操作 (NATS Core + JetStream)
 - **JsonPayloadProcessor.java**: JSON 載荷處理實作
 - **K8sCredentialServiceImpl.java**: Kubernetes 憑證管理
-- **NatsMessageServiceImpl.java**: 核心 NATS 訊息實作
+- **NatsMessageServiceImpl.java**: 原始 NATS 訊息實作 (向下兼容)
+- **NatsPublishProcessor.java**: 發布專用處理器 (Template Method)
+- **NatsRequestProcessor.java**: 請求專用處理器 (Template Method)
 - **RequestLogServiceImpl.java**: 資料庫記錄實作
-- **RetryServiceImpl.java**: 重試邏輯實作
+- **StringResponseHandler.java**: 字串回應處理器
+
+###### 觀察者模式 (`service/observer/`)
+- **NatsEventPublisher.java**: 事件發布者 (Observer Pattern)
 
 ###### 驗證器 (`service/validator/`)
 - **RequestValidator.java**: API 請求的輸入驗證
+
+##### `util/` - 工具類別 (新增)
+- **CorrelationIdGenerator.java**: 關聯 ID 生成工具
 
 ### 應用程式資源 (`src/main/resources/`)
 
@@ -166,32 +185,52 @@ src/test/java/com/example/natsclient/
 └── 📁 service/                    # 服務層測試
 ```
 
-#### 測試組織
+#### 測試組織 (Enhanced Test Suite)
 
 ##### `controller/` - 控制器測試
 - **NatsControllerTest.java**: 使用 MockMvc 的 REST API 端點測試
 
-##### `demo/` - 示範和探索
-- **NatsFunctionalityDemo.java**: NATS 功能示範
+##### `demo/` - 示範和探索  
+- **NatsFunctionalityDemo.java**: Enhanced NATS 功能完整示範 (包含設計模式展示)
+
+##### `entity/` - 實體測試 (新增)
+- 資料庫實體的單元測試
+
+##### `exception/` - 例外處理測試 (新增)
+- **GlobalExceptionHandlerTestSimple.java**: 全域例外處理器測試
 
 ##### `integration/` - 整合測試
-- **NatsIntegrationTest.java**: 使用真實元件的端到端整合測試
+- **NatsIntegrationTest.java**: Enhanced NATS 端到端整合測試
 
-##### `performance/` - 效能測試
-- **NatsPerformanceTest.java**: 負載測試和效能基準測試
+##### `model/` - 模型測試 (新增)
+- 資料傳輸物件的測試
 
-##### `service/` - 服務層測試
+##### `performance/` - 效能測試 (Enhanced)
+- **NatsPerformanceTest.java**: Enhanced NATS 負載測試、並發測試和記憶體洩漏檢測
+
+##### `service/` - 服務層測試 (Enhanced Architecture Tests)
 ```
 service/
 ├── 📄 NatsOrchestrationServiceTest.java    # 編排服務測試
-├── 📁 impl/                               # 實作測試
-│   ├── 📄 EnhancedNatsMessageServiceTest.java
+├── 📁 factory/                             # 工廠模式測試 (新增)
+├── 📁 impl/                                # 實作測試 (Enhanced)
+│   ├── 📄 EnhancedNatsMessageServiceTest.java  # 企業級服務測試 (100+ 測試案例)
 │   ├── 📄 JsonPayloadProcessorTest.java
-│   ├── 📄 NatsMessageServiceImplTest.java
+│   ├── 📄 NatsMessageServiceImplTest.java      # 原始服務測試
 │   └── 📄 RequestLogServiceImplTest.java
-└── 📁 validator/                          # 驗證器測試
+└── 📁 validator/                           # 驗證器測試
     └── 📄 RequestValidatorTest.java
 ```
+
+##### `util/` - 工具類別測試 (新增)
+- 工具函數和輔助類別的單元測試
+
+#### Enhanced Testing Features
+- **100+ 測試案例**: 全面覆蓋所有設計模式和功能
+- **並發測試**: 多執行緒環境下的 Enhanced NATS 服務驗證
+- **性能基準**: 回應時間、吞吐量和記憶體使用監控
+- **模式測試**: Template Method、Observer、Factory 模式的專門測試
+- **錯誤模擬**: 各種失敗情境和例外處理測試
 
 ### 測試資源 (`src/test/resources/`)
 
@@ -242,37 +281,117 @@ target/
 ### 文件
 - **README.md**: 主要專案文件，包含快速開始和導覽
 
-## 🎯 資料夾使用指導原則
+## 🏗️ Enhanced NATS 設計模式架構
 
-### 開發工作流程
-1. **原始碼**: 所有業務邏輯放在 `src/main/java/`
-2. **配置**: 環境配置放在 `src/main/resources/`
-3. **測試**: 完整測試放在 `src/test/java/`
-4. **文件**: 所有文件放在 `docs/` 資料夾
-5. **建置**: 使用 `apache-maven-3.9.6/bin/mvn` 確保一致性建置
+### Template Method Pattern
+```
+AbstractNatsMessageProcessor (抽象基類)
+├── NatsRequestProcessor (請求處理專門化)
+└── NatsPublishProcessor (發布處理專門化)
+```
 
-### 檔案組織原則
-- **單一職責**: 每個類別/套件都有一個明確的目的
-- **分層架構**: 控制器、服務和存取庫之間清楚分離
-- **測試覆蓋**: 測試結構反映主程式碼結構
-- **配置管理**: 依環境分離的配置設定檔
-- **文件完整**: 專案所有面向的完整文件
+- **目的**: 定義訊息處理的標準演算法骨架，允許子類別特化特定步驟
+- **實現**: 共同的驗證、日誌記錄和錯誤處理，專門化的實際 NATS 操作
+- **優勢**: 程式碼重用、一致性、易於擴展
 
-### 最佳實務
-- 保持套件專注和內聚
-- 遵循 Maven 標準目錄結構
-- 維持所有層的測試覆蓋
-- 記錄所有主要元件和 API
-- 使用配置設定檔應對不同環境
+### Observer Pattern 
+```
+NatsEventPublisher (事件發布者)
+└── 監聽器們 (各種監控、日誌、指標收集器)
+```
 
-這個結構確保了可維護性、可擴展性，並方便新開發人員上手。
+- **目的**: 實現鬆耦合的事件驅動架構
+- **實現**: 訊息處理事件的發布和訂閱
+- **優勢**: 可擴展的監控、容易添加新的事件處理器
 
-## 🔍 整理後的變更
+### Factory Pattern
+```
+MetricsFactory (指標工廠)
+└── NatsMetricsSet (指標集合)
+    ├── 請求計數器
+    ├── 成功計數器  
+    ├── 錯誤計數器
+    └── 回應時間計時器
+```
 
-在本次整理中，我們移除了以下不必要的檔案：
-- `k8s-nats-client.yml` - 個別的 Kubernetes 配置 (已整合到 k8s-deploy-all.yml)
-- `k8s-nats.yml` - 個別的 NATS Kubernetes 配置
-- `k8s-oracle.yml` - 個別的 Oracle Kubernetes 配置
-- `src/main/java/com/example/natsclient/health/` - 空的資料夾
+- **目的**: 集中管理 Micrometer 指標的創建
+- **實現**: 按服務類型創建標準化的指標集合
+- **優勢**: 一致的指標命名、集中配置、易於維護
 
-現在專案結構更加乾淨，只保留實際使用的部署配置檔案。
+### Hybrid Operations (雙模式操作)
+```
+HybridNatsOperations
+├── NATS Core (用於請求-回應)
+└── JetStream (用於發布操作)
+```
+
+- **目的**: 根據操作類型選擇最適合的 NATS 模式
+- **實現**: 請求使用 NATS Core (效能)，發布使用 JetStream (可靠性)
+- **優勢**: 效能和可靠性的最佳平衡
+
+## 🎯 Enhanced 開發指導原則
+
+### 開發工作流程 (Enhanced)
+1. **設計模式優先**: 新功能應遵循已建立的 Template Method、Observer、Factory 模式
+2. **測試驅動**: 每個新功能都需要對應的單元測試和整合測試
+3. **指標監控**: 所有業務邏輯都應該包含適當的 Micrometer 指標
+4. **事件發布**: 重要操作應發布事件以支援監控和審計
+5. **錯誤處理**: 使用標準化的例外處理和錯誤回應格式
+
+### Enhanced 檔案組織原則
+- **模式分離**: 按設計模式組織程式碼 (factory/, observer/, impl/)
+- **職責專門化**: Template Method 子類別各有明確的專門職責
+- **事件驱動**: Observer 模式支援松耦合的功能擴展
+- **指標標準化**: Factory 模式確保一致的監控指標
+- **向下兼容**: 保留原始實現以支援現有集成
+
+### Enhanced 最佳實務
+- **Enterprise Patterns**: 使用企業級設計模式確保可維護性
+- **Comprehensive Testing**: 100+ 測試案例覆蓋所有設計模式和邊緣情況
+- **Performance Monitoring**: 內建性能基準和並發測試
+- **Memory Management**: 自動檢測記憶體洩漏和資源管理
+- **Event-Driven Architecture**: 使用 Observer 模式支援可擴展的功能
+
+這個 Enhanced 結構確保了企業級的可維護性、可擴展性和高性能，同時提供全面的監控和測試覆蓋。
+
+## 🔍 Enhanced NATS 架構變更摘要
+
+### 新增的 Enhanced Features (v0.0.1-SNAPSHOT)
+
+#### 設計模式實現
+- **Template Method Pattern**: `AbstractNatsMessageProcessor` + 專門化子類別
+- **Observer Pattern**: `NatsEventPublisher` 事件驅動架構
+- **Factory Pattern**: `MetricsFactory` 集中指標管理
+- **Builder Pattern**: `NatsPublishOptionsBuilder` JetStream 配置建造
+
+#### 新增核心類別
+- `EnhancedNatsMessageService.java` - 主要企業級服務
+- `HybridNatsOperations.java` - 雙模式 NATS 操作
+- `NatsRequestProcessor.java` - 請求專用處理器
+- `NatsPublishProcessor.java` - 發布專用處理器
+- `MetricsFactory.java` - Micrometer 指標工廠
+- `NatsEventPublisher.java` - 事件發布者
+
+#### Enhanced 測試套件
+- **100+ 測試案例**: 全面覆蓋所有設計模式
+- **並發測試**: 多執行緒環境驗證
+- **性能基準**: 吞吐量和回應時間測試
+- **記憶體洩漏檢測**: 自動資源管理驗證
+
+#### 監控和可觀測性
+- **Micrometer 整合**: 實時指標收集
+- **成功率計算**: 動態統計分析
+- **關聯 ID 追蹤**: 端到端請求追蹤
+- **事件驅動監控**: Observer 模式支援的可擴展監控
+
+### 向下相容性
+- 保留原始 `NatsMessageServiceImpl` 以支援現有集成
+- API 端點保持不變
+- 配置格式向下相容
+
+---
+
+**版本**: Enhanced NATS Client v0.0.1-SNAPSHOT  
+**更新日期**: 2025年8月23日  
+**架構**: Template Method + Observer + Factory + Hybrid Operations  
+**測試覆蓋**: 100+ 測試案例，包含企業級性能和可靠性驗證
