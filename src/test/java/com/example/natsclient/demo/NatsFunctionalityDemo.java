@@ -60,7 +60,7 @@ class NatsFunctionalityDemo {
     @Mock
     private NatsProperties.JetStream jetStreamProperties;
     @Mock
-    private NatsProperties.JetStream.Stream streamProperties;
+    private NatsProperties.JetStream.StreamConfig streamProperties;
     @Mock
     private MeterRegistry meterRegistry;
     @Mock

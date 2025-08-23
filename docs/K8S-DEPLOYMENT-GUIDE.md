@@ -1,6 +1,62 @@
-# Kubernetes 部署實戰指南 (Enhanced NATS 版本)
+# Kubernetes 部署實戰指南
 
-本指南記錄了 NATS Client Service 在 Kubernetes 環境中的實際部署、測試流程和最佳實踐。此版本使用 Enhanced NATS Message Service 和 Template Method 設計模式，提供企業級的 JetStream 支援、完整的監控指標和可靠的訊息處理。
+完整的NATS Client Service Kubernetes部署指南，包含OpenAPI Swagger UI、自動化部署腳本和測試流程。
+
+## 🚀 快速部署
+
+### 一鍵部署命令
+
+```bash
+# 快速部署到Kubernetes
+./scripts/k8s-deploy.sh
+
+# 或者手動部署步驟
+minikube start
+docker build -t nats-client:latest .
+minikube image load nats-client:latest
+kubectl apply -f k8s-deploy-all.yml
+```
+
+### 服務訪問地址
+
+部署完成後可通過以下地址訪問：
+
+| 服務 | 地址 | 描述 |
+|------|------|------|
+| **API服務** | http://localhost:30080 | 主要REST API端點 |
+| **Swagger UI** | http://localhost:30080/swagger-ui.html | 完整API文檔和測試界面 |
+| **健康檢查** | http://localhost:30080/actuator/health | Spring Boot健康監控 |
+| **NATS監控** | http://localhost:30822 | NATS服務器監控頁面 |
+| **統計信息** | http://localhost:30080/api/nats/statistics | 實時統計數據 |
+
+### API測試快速驗證
+
+```bash
+# 測試發布消息（使用NodePort）
+curl -X POST http://localhost:30080/api/nats/publish \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "test.k8s.publish",
+    "payload": {
+      "message": "Hello from K8s deployment!",
+      "timestamp": "'$(date -Iseconds)'"
+    }
+  }'
+
+# 測試請求響應
+curl -X POST http://localhost:30080/api/nats/request \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "test.echo",
+    "payload": {
+      "message": "Hello Echo from K8s!",
+      "requestId": "k8s-test-001"
+    }
+  }'
+
+# 查看統計信息
+curl http://localhost:30080/api/nats/statistics
+```
 
 ## 📋 目錄
 

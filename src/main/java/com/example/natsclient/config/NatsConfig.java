@@ -1,7 +1,5 @@
 package com.example.natsclient.config;
 
-import com.example.natsclient.model.NatsCredentials;
-import com.example.natsclient.service.impl.K8sCredentialServiceImpl;
 import io.nats.client.Connection;
 import io.nats.client.JetStream;
 import io.nats.client.JetStreamManagement;
@@ -11,37 +9,29 @@ import io.nats.client.Options;
 import io.nats.client.api.StreamConfiguration;
 import io.nats.client.api.StorageType;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.time.Duration;
 
 @Configuration
+@EnableConfigurationProperties(NatsProperties.class)
 @Slf4j
 public class NatsConfig {
 
+    private final NatsProperties natsProperties;
 
-    @Autowired
-    private NatsProperties natsProperties;
-    
-    @Autowired
-    private K8sCredentialServiceImpl credentialService;
+    public NatsConfig(NatsProperties natsProperties) {
+        this.natsProperties = natsProperties;
+    }
 
     @Bean
     public Connection natsConnection() throws IOException, InterruptedException {
-        // 從Vault/K8s獲取credentials
-        NatsCredentials vaultCredentials = credentialService.loadNatsCredentials();
-        
-        // 決定使用哪個URL：Vault credentials > properties配置
-        String natsUrl = StringUtils.hasText(vaultCredentials.getUrl()) ? 
-                        vaultCredentials.getUrl() : natsProperties.getUrl();
-        
         Options.Builder optionsBuilder = new Options.Builder()
-                .server(natsUrl)
+                .server(natsProperties.getUrl())
                 .connectionName(natsProperties.getConnectionName())
                 .connectionTimeout(Duration.ofMillis(natsProperties.getConnection().getTimeout()))
                 .reconnectWait(Duration.ofMillis(natsProperties.getConnection().getReconnect().getWait()))
@@ -55,25 +45,16 @@ public class NatsConfig {
             optionsBuilder.noEcho();
         }
         
-        // 優先使用Vault/K8s credentials，然後才使用properties配置
-        if (vaultCredentials.hasUserPassword()) {
-            optionsBuilder.userInfo(vaultCredentials.getUsername(), vaultCredentials.getPassword());
-            log.info("Using username/password authentication from Vault/K8s");
-        } else if (vaultCredentials.hasToken()) {
-            optionsBuilder.authHandler(Nats.staticCredentials(null, vaultCredentials.getToken().toCharArray()));
-            log.info("Using token authentication from Vault/K8s");
-        } else if (vaultCredentials.hasCredentialsFile()) {
-            optionsBuilder.authHandler(Nats.credentials(vaultCredentials.getCredentialsFile()));
-            log.info("Using credentials file authentication from Vault/K8s");
-        } else if (StringUtils.hasText(natsProperties.getUsername()) && StringUtils.hasText(natsProperties.getPassword())) {
+        // 認證邏輯 - 從 application.yml 配置取得
+        if (StringUtils.hasText(natsProperties.getUsername()) && StringUtils.hasText(natsProperties.getPassword())) {
             optionsBuilder.userInfo(natsProperties.getUsername(), natsProperties.getPassword());
-            log.info("Using username/password authentication from properties");
+            log.info("Using username/password authentication");
         } else if (StringUtils.hasText(natsProperties.getToken())) {
             optionsBuilder.authHandler(Nats.staticCredentials(null, natsProperties.getToken().toCharArray()));
-            log.info("Using token authentication from properties");
+            log.info("Using token authentication");
         } else if (StringUtils.hasText(natsProperties.getCredentials())) {
             optionsBuilder.authHandler(Nats.credentials(natsProperties.getCredentials()));
-            log.info("Using credentials file authentication from properties");
+            log.info("Using credentials file authentication");
         }
         
         Options options = optionsBuilder
@@ -107,8 +88,8 @@ public class NatsConfig {
                 .build();
 
         Connection connection = Nats.connect(options);
-        log.info("Connected to NATS server: {} with connection name: '{}' [Enhanced with unlimited reconnection]", 
-                natsUrl, natsProperties.getConnectionName());
+        log.info("Connected to NATS server: {} with connection name: '{}'", 
+                natsProperties.getUrl(), natsProperties.getConnectionName());
         return connection;
     }
 
@@ -145,8 +126,7 @@ public class NatsConfig {
 
         JetStream js = connection.jetStream(jsOptionsBuilder.build());
         log.info("JetStream context created with domain: {} and prefix: {}", 
-                natsProperties.getJetStream().getDomain(), 
-                natsProperties.getJetStream().getPrefix());
+                natsProperties.getJetStream().getDomain(), natsProperties.getJetStream().getPrefix());
         return js;
     }
 
@@ -164,13 +144,18 @@ public class NatsConfig {
                 log.info("Creating default stream: {}", streamName);
             }
 
-            StorageType storageType = "FILE".equalsIgnoreCase(natsProperties.getJetStream().getStream().getStorage()) 
+            String storageTypeStr = natsProperties.getJetStream().getStream().getStorage();
+            StorageType storage = "FILE".equalsIgnoreCase(storageTypeStr) 
                     ? StorageType.File : StorageType.Memory;
+
+            // 從 application.yml 配置取得 subjects
+            String[] subjects = natsProperties.getJetStream().getStream().getSubjects()
+                    .toArray(new String[0]);
 
             StreamConfiguration streamConfig = StreamConfiguration.builder()
                     .name(streamName)
-                    .subjects(natsProperties.getJetStream().getStream().getSubjects())
-                    .storageType(storageType)
+                    .subjects(subjects)
+                    .storageType(storage)
                     .maxAge(Duration.ofMillis(natsProperties.getJetStream().getStream().getMaxAge()))
                     .maxMessages(natsProperties.getJetStream().getStream().getMaxMsgs())
                     .replicas(natsProperties.getJetStream().getStream().getReplicas())
@@ -178,7 +163,7 @@ public class NatsConfig {
 
             jsm.addStream(streamConfig);
             log.info("Successfully created stream '{}' with subjects: {}", streamName, 
-                    String.join(", ", natsProperties.getJetStream().getStream().getSubjects()));
+                    String.join(", ", subjects));
             
         } catch (Exception e) {
             log.error("Failed to create default stream", e);

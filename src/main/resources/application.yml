@@ -1,8 +1,8 @@
 spring:
   datasource:
     url: jdbc:oracle:thin:@localhost:1521:xe
-    username: ${DB_USERNAME:your_username}
-    password: ${DB_PASSWORD:your_password}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: oracle.jdbc.OracleDriver
   
   jpa:
@@ -25,11 +25,11 @@ spring:
 nats:
   url: ${NATS_URL:nats://localhost:4222}
   connection-name: ${NATS_CONNECTION_NAME:nats-client-service}
-  # Authentication options (choose one)
-  username: ${NATS_USERNAME:}
-  password: ${NATS_PASSWORD:}
-  token: ${NATS_TOKEN:}
-  credentials: ${NATS_CREDENTIALS_FILE:}
+  # Authentication options (choose one) - 敏感資料透過環境變數從 Vault 取得
+  username: ${NATS_USERNAME}
+  password: ${NATS_PASSWORD}
+  token: ${NATS_TOKEN}
+  credentials: ${NATS_CREDENTIALS_FILE}
   
   connection:
     timeout: ${NATS_CONNECTION_TIMEOUT:10000}
@@ -43,13 +43,13 @@ nats:
   request:
     timeout: ${NATS_REQUEST_TIMEOUT:30000}
     
-  # TLS configuration
+  # TLS configuration - 敏感資料透過環境變數從 Vault 取得
   tls:
     enabled: ${NATS_TLS_ENABLED:false}
-    keystore: ${NATS_TLS_KEYSTORE:}
-    keystorePassword: ${NATS_TLS_KEYSTORE_PASSWORD:}
-    truststore: ${NATS_TLS_TRUSTSTORE:}
-    truststorePassword: ${NATS_TLS_TRUSTSTORE_PASSWORD:}
+    keystore: ${NATS_TLS_KEYSTORE}
+    keystorePassword: ${NATS_TLS_KEYSTORE_PASSWORD}
+    truststore: ${NATS_TLS_TRUSTSTORE}
+    truststorePassword: ${NATS_TLS_TRUSTSTORE_PASSWORD}
   
   # Logging configuration
   logging:
@@ -85,6 +85,34 @@ nats:
       replicate: ${NATS_JETSTREAM_REPLICATE:false}
       replicas: ${NATS_JETSTREAM_REPLICAS:1}
 
+# OpenAPI/Swagger Configuration - 最簡配置
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+# Management Endpoints for OpenAPI
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+# Application Information for OpenAPI
+info:
+  app:
+    name: '@project.name@'
+    description: '@project.description@'
+    version: '@project.version@'
+    java-version: '@java.version@'
+
 logging:
   level:
     com.example.natsclient: DEBUG
@@ -102,13 +130,14 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
 
-# Vault Agent 和 K8s Secret 掛載路徑
 nats:
   url: ${NATS_URL:nats://nats-server:4222}
   connection-name: ${NATS_CONNECTION_NAME:nats-client-k8s}
-  credentials:
-    vault-path: /vault/secrets
-    k8s-secret-path: /etc/secrets/nats
+  # 敏感資料透過環境變數從 Vault 取得
+  username: ${NATS_USERNAME}
+  password: ${NATS_PASSWORD}
+  token: ${NATS_TOKEN}
+  credentials: ${NATS_CREDENTIALS_FILE}
 
 ---
 # Local Development Profile

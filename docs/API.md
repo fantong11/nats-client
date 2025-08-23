@@ -1,15 +1,45 @@
-# API Documentation
+# NATS Client API Documentation
 
-Complete API reference for the NATS Client Service, including all endpoints, request/response formats, and examples.
+完整的NATS Client Service API參考文檔，包含所有端點、請求/響應格式和使用示例。
 
-## 📋 Table of Contents
+## 📋 目錄
 
-- [Base Information](#base-information)
-- [Authentication](#authentication)
-- [Core Endpoints](#core-endpoints)
-- [Monitoring Endpoints](#monitoring-endpoints)
-- [Error Handling](#error-handling)
-- [Current Architecture Features](#current-architecture-features)
+- [API概覽](#api概覽)
+- [Swagger UI](#swagger-ui)
+- [認證授權](#認證授權)
+- [核心端點](#核心端點)
+- [監控端點](#監控端點)
+- [錯誤處理](#錯誤處理)
+- [架構特性](#架構特性)
+- [使用示例](#使用示例)
+
+## 🌐 API概覽
+
+### 基礎URL
+```
+http://localhost:8080/api/nats
+```
+
+### 內容類型
+所有API請求和響應使用 `application/json`，除非另有說明。
+
+### API版本
+當前版本: `1.0.0`
+
+## 📚 Swagger UI
+
+啟動應用後，可以通過以下URL訪問完整的API文檔：
+
+- **Swagger UI**: http://localhost:8080/swagger-ui.html
+- **OpenAPI文檔**: http://localhost:8080/api-docs
+- **API文檔JSON**: http://localhost:8080/v3/api-docs
+
+### Swagger UI 功能
+- 🎯 **Try it out**: 直接在頁面測試API
+- 🔍 **API過濾**: 快速搜索特定端點
+- ⏱️ **請求時長顯示**: 查看API響應時間
+- 📖 **完整文檔**: 包含所有參數和響應示例
+- 🏷️ **標籤分組**: 按功能分組的API端點
 
 ## 🌐 Base Information
 
@@ -65,16 +95,32 @@ Responses vary by endpoint but generally follow these patterns:
 }
 ```
 
-## 🔐 Authentication
+## 🔐 認證授權
 
-Currently, the service operates without authentication for internal microservice communication. For production deployments, consider implementing:
+當前服務主要用於內部微服務通信，暫不需要特殊認證。對於生產環境部署，建議實施：
 
-- API Keys
-- JWT tokens
-- OAuth 2.0
-- mTLS
+- **API Keys**: 服務間認證
+- **JWT Tokens**: 用戶身份驗證
+- **OAuth 2.0**: 標準授權協議
+- **mTLS**: 雙向TLS認證
+- **IP白名單**: 網絡層訪問控制
 
-## 🎯 Core Endpoints
+## 🎯 核心端點
+
+### API端點總覽
+
+| 標籤 | 方法 | 端點 | 描述 |
+|------|------|------|------|
+| NATS Operations | POST | `/api/nats/request` | 發送NATS請求並等待響應 |
+| NATS Operations | POST | `/api/nats/publish` | 發布消息到NATS JetStream |
+| Request Tracking | GET | `/api/nats/status/{requestId}` | 根據請求ID查詢狀態 |
+| Request Tracking | GET | `/api/nats/status/correlation/{correlationId}` | 根據相關ID查詢狀態 |
+| Request Tracking | GET | `/api/nats/requests/{status}` | 根據狀態查詢請求列表 |
+| Statistics | GET | `/api/nats/statistics` | 獲取NATS統計信息 |
+| Health Check | GET | `/api/nats/health` | 檢查服務健康狀態 |
+| Testing | POST | `/api/nats/test/echo` | 測試回音功能 |
+| Testing | POST | `/api/nats/test/timeout` | 測試超時處理 |
+| Testing | POST | `/api/nats/test/error` | 測試錯誤處理 |
 
 ### Send NATS Request
 Sends a message to NATS JetStream and processes it asynchronously with the Enhanced NATS Message Service.
