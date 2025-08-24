@@ -1,7 +1,7 @@
 package com.example.natsclient.performance;
 
 import com.example.natsclient.config.NatsProperties;
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
 import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
@@ -130,7 +130,7 @@ class NatsPerformanceTest {
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         lenient().when(payloadProcessor.fromBytes(responseBytes)).thenReturn(responsePayload);
         when(requestLogService.createRequestLog(anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(new NatsRequestLog());
+                .thenReturn(new NatsRequestLogDto());
         
         // Essential mocks for NATS operations
         try {

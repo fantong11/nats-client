@@ -1,8 +1,8 @@
 package com.example.natsclient.integration;
 
 import com.example.natsclient.NatsClientApplication;
-import com.example.natsclient.entity.NatsRequestLog;
-import com.example.natsclient.repository.NatsRequestLogRepository;
+import com.example.natsclient.dto.NatsRequestLogDto;
+import com.example.natsclient.repository.JdbcNatsRequestLogRepository;
 import com.example.natsclient.service.NatsOrchestrationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,7 +72,7 @@ public class NatsIntegrationTest {
     private MetricsEventObserver metricsEventObserver;
 
     @Autowired
-    private NatsRequestLogRepository requestLogRepository;
+    private JdbcNatsRequestLogRepository requestLogRepository;
 
     @Autowired
     private NatsOrchestrationService orchestrationService;
@@ -126,9 +126,9 @@ public class NatsIntegrationTest {
         var requests = requestLogRepository.findAll();
         assertEquals(1, requests.size());
         
-        NatsRequestLog savedRequest = requests.get(0);
+        NatsRequestLogDto savedRequest = requests.get(0);
         assertEquals("integration.test", savedRequest.getSubject());
-        assertEquals(NatsRequestLog.RequestStatus.SUCCESS, savedRequest.getStatus());
+        assertEquals(NatsRequestLogDto.RequestStatus.SUCCESS, savedRequest.getStatus());
         assertNotNull(savedRequest.getRequestId());
         assertNotNull(savedRequest.getCorrelationId());
         assertNotNull(savedRequest.getResponsePayload());
@@ -174,20 +174,20 @@ public class NatsIntegrationTest {
         var requests = requestLogRepository.findAll();
         assertEquals(1, requests.size());
         
-        NatsRequestLog savedRequest = requests.get(0);
+        NatsRequestLogDto savedRequest = requests.get(0);
         assertEquals("integration.publish", savedRequest.getSubject());
-        assertEquals(NatsRequestLog.RequestStatus.SUCCESS, savedRequest.getStatus());
+        assertEquals(NatsRequestLogDto.RequestStatus.SUCCESS, savedRequest.getStatus());
     }
 
     @Test
     void requestStatus_ShouldReturnPersistedData() throws Exception {
         // Arrange - Create a test request first
-        NatsRequestLog testRequest = new NatsRequestLog();
+        NatsRequestLogDto testRequest = new NatsRequestLogDto();
         testRequest.setRequestId("test-req-123");
         testRequest.setSubject("test.status");
         testRequest.setRequestPayload("{\"test\":\"data\"}");
         testRequest.setCorrelationId("test-corr-456");
-        testRequest.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+        testRequest.setStatus(NatsRequestLogDto.RequestStatus.SUCCESS);
         testRequest.setCreatedBy("TEST");
         
         requestLogRepository.save(testRequest);
@@ -204,10 +204,10 @@ public class NatsIntegrationTest {
     @Test
     void statistics_ShouldCalculateFromDatabase() throws Exception {
         // Arrange - Create test data
-        createTestRequestLog("req-1", NatsRequestLog.RequestStatus.SUCCESS);
-        createTestRequestLog("req-2", NatsRequestLog.RequestStatus.SUCCESS);
-        createTestRequestLog("req-3", NatsRequestLog.RequestStatus.FAILED);
-        createTestRequestLog("req-4", NatsRequestLog.RequestStatus.ERROR);
+        createTestRequestLog("req-1", NatsRequestLogDto.RequestStatus.SUCCESS);
+        createTestRequestLog("req-2", NatsRequestLogDto.RequestStatus.SUCCESS);
+        createTestRequestLog("req-3", NatsRequestLogDto.RequestStatus.FAILED);
+        createTestRequestLog("req-4", NatsRequestLogDto.RequestStatus.ERROR);
 
         // Act & Assert
         mockMvc.perform(get("/api/nats/statistics"))
@@ -222,9 +222,9 @@ public class NatsIntegrationTest {
     @Test
     void requestsByStatus_ShouldFilterFromDatabase() throws Exception {
         // Arrange
-        createTestRequestLog("success-1", NatsRequestLog.RequestStatus.SUCCESS);
-        createTestRequestLog("success-2", NatsRequestLog.RequestStatus.SUCCESS);
-        createTestRequestLog("failed-1", NatsRequestLog.RequestStatus.FAILED);
+        createTestRequestLog("success-1", NatsRequestLogDto.RequestStatus.SUCCESS);
+        createTestRequestLog("success-2", NatsRequestLogDto.RequestStatus.SUCCESS);
+        createTestRequestLog("failed-1", NatsRequestLogDto.RequestStatus.FAILED);
 
         // Act & Assert
         mockMvc.perform(get("/api/nats/requests/{status}", "SUCCESS"))
@@ -241,9 +241,9 @@ public class NatsIntegrationTest {
     @Test
     void healthEndpoint_ShouldReflectDatabaseState() throws Exception {
         // Arrange
-        createTestRequestLog("health-1", NatsRequestLog.RequestStatus.SUCCESS);
-        createTestRequestLog("health-2", NatsRequestLog.RequestStatus.SUCCESS);
-        createTestRequestLog("health-3", NatsRequestLog.RequestStatus.FAILED);
+        createTestRequestLog("health-1", NatsRequestLogDto.RequestStatus.SUCCESS);
+        createTestRequestLog("health-2", NatsRequestLogDto.RequestStatus.SUCCESS);
+        createTestRequestLog("health-3", NatsRequestLogDto.RequestStatus.FAILED);
 
         // Act & Assert
         mockMvc.perform(get("/api/nats/health"))
@@ -279,14 +279,14 @@ public class NatsIntegrationTest {
         var requests = requestLogRepository.findAll();
         assertEquals(1, requests.size());
         
-        NatsRequestLog savedRequest = requests.get(0);
+        NatsRequestLogDto savedRequest = requests.get(0);
         assertEquals("failure.test", savedRequest.getSubject());
-        assertEquals(NatsRequestLog.RequestStatus.ERROR, savedRequest.getStatus());
+        assertEquals(NatsRequestLogDto.RequestStatus.ERROR, savedRequest.getStatus());
         assertNotNull(savedRequest.getErrorMessage());
     }
 
-    private void createTestRequestLog(String requestId, NatsRequestLog.RequestStatus status) {
-        NatsRequestLog log = new NatsRequestLog();
+    private void createTestRequestLog(String requestId, NatsRequestLogDto.RequestStatus status) {
+        NatsRequestLogDto log = new NatsRequestLogDto();
         log.setRequestId(requestId);
         log.setSubject("test.subject");
         log.setRequestPayload("{\"test\":\"data\"}");
@@ -294,9 +294,9 @@ public class NatsIntegrationTest {
         log.setStatus(status);
         log.setCreatedBy("TEST");
         
-        if (status == NatsRequestLog.RequestStatus.SUCCESS) {
+        if (status == NatsRequestLogDto.RequestStatus.SUCCESS) {
             log.setResponsePayload("{\"status\":\"success\"}");
-        } else if (status != NatsRequestLog.RequestStatus.PENDING) {
+        } else if (status != NatsRequestLogDto.RequestStatus.PENDING) {
             log.setErrorMessage("Test error message");
         }
         

@@ -1,6 +1,6 @@
 package com.example.natsclient.controller;
 
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.service.NatsOrchestrationService;
 import com.example.natsclient.service.NatsOrchestrationService.*;
 import io.swagger.v3.oas.annotations.Operation;
@@ -264,7 +264,7 @@ public class NatsController {
         log.debug("Getting requests with status: {}", status);
         
         try {
-            NatsRequestLog.RequestStatus requestStatus = NatsRequestLog.RequestStatus.valueOf(status.toUpperCase());
+            NatsRequestLogDto.RequestStatus requestStatus = NatsRequestLogDto.RequestStatus.valueOf(status.toUpperCase());
             List<NatsRequestStatus> requests = orchestrationService.getRequestsByStatus(requestStatus);
             return ResponseEntity.ok(requests);
         } catch (IllegalArgumentException e) {

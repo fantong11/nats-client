@@ -1,10 +1,10 @@
 package com.example.natsclient.service;
 
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 
 public interface RequestLogService {
     
-    NatsRequestLog createRequestLog(String requestId, String subject, String payload, String correlationId);
+    NatsRequestLogDto createRequestLog(String requestId, String subject, String payload, String correlationId);
     
     void updateWithSuccess(String requestId, String responsePayload);
     
@@ -12,5 +12,5 @@ public interface RequestLogService {
     
     void updateWithError(String requestId, String errorMessage);
     
-    void saveRequestLog(NatsRequestLog requestLog);
+    void saveRequestLog(NatsRequestLogDto requestLog);
 }

@@ -1,16 +1,17 @@
 package com.example.natsclient.entity;
 
+import com.example.natsclient.dto.NatsRequestLogDto;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class NatsRequestLogTest {
+class NatsRequestLogDtoTest {
 
     @Test
     void defaultConstructor_ShouldCreateEmptyLog() {
-        NatsRequestLog log = new NatsRequestLog();
+        NatsRequestLogDto log = new NatsRequestLogDto();
         
         assertNull(log.getId());
         assertNull(log.getRequestId());
@@ -18,10 +19,10 @@ class NatsRequestLogTest {
         assertNull(log.getSubject());
         assertNull(log.getRequestPayload());
         assertNull(log.getResponsePayload());
-        assertEquals(NatsRequestLog.RequestStatus.PENDING, log.getStatus()); // Default value
+        assertNull(log.getStatus()); // No default value
         assertNull(log.getRequestTimestamp());
         assertNull(log.getResponseTimestamp());
-        assertEquals(0, log.getRetryCount());
+        assertNull(log.getRetryCount());
         assertNull(log.getTimeoutDuration());
         assertNull(log.getErrorMessage());
         assertNull(log.getCreatedDate());
@@ -30,7 +31,7 @@ class NatsRequestLogTest {
 
     @Test
     void settersAndGetters_ShouldWorkCorrectly() {
-        NatsRequestLog log = new NatsRequestLog();
+        NatsRequestLogDto log = new NatsRequestLogDto();
         
         Long id = 1L;
         String requestId = "req-123";
@@ -38,7 +39,7 @@ class NatsRequestLogTest {
         String subject = "test.subject";
         String requestPayload = "{\"test\": \"data\"}";
         String responsePayload = "{\"result\": \"success\"}";
-        NatsRequestLog.RequestStatus status = NatsRequestLog.RequestStatus.SUCCESS;
+        NatsRequestLogDto.RequestStatus status = NatsRequestLogDto.RequestStatus.SUCCESS;
         LocalDateTime requestTimestamp = LocalDateTime.now();
         LocalDateTime responseTimestamp = LocalDateTime.now().plusSeconds(1);
         int retryCount = 2;
@@ -80,27 +81,27 @@ class NatsRequestLogTest {
 
     @Test
     void requestStatusEnum_ShouldHaveAllExpectedValues() {
-        NatsRequestLog.RequestStatus[] statuses = NatsRequestLog.RequestStatus.values();
+        NatsRequestLogDto.RequestStatus[] statuses = NatsRequestLogDto.RequestStatus.values();
         
         assertEquals(5, statuses.length);
-        assertEquals(NatsRequestLog.RequestStatus.PENDING, NatsRequestLog.RequestStatus.valueOf("PENDING"));
-        assertEquals(NatsRequestLog.RequestStatus.SUCCESS, NatsRequestLog.RequestStatus.valueOf("SUCCESS"));
-        assertEquals(NatsRequestLog.RequestStatus.FAILED, NatsRequestLog.RequestStatus.valueOf("FAILED"));
-        assertEquals(NatsRequestLog.RequestStatus.TIMEOUT, NatsRequestLog.RequestStatus.valueOf("TIMEOUT"));
-        assertEquals(NatsRequestLog.RequestStatus.ERROR, NatsRequestLog.RequestStatus.valueOf("ERROR"));
+        assertEquals(NatsRequestLogDto.RequestStatus.PENDING, NatsRequestLogDto.RequestStatus.valueOf("PENDING"));
+        assertEquals(NatsRequestLogDto.RequestStatus.SUCCESS, NatsRequestLogDto.RequestStatus.valueOf("SUCCESS"));
+        assertEquals(NatsRequestLogDto.RequestStatus.FAILED, NatsRequestLogDto.RequestStatus.valueOf("FAILED"));
+        assertEquals(NatsRequestLogDto.RequestStatus.TIMEOUT, NatsRequestLogDto.RequestStatus.valueOf("TIMEOUT"));
+        assertEquals(NatsRequestLogDto.RequestStatus.ERROR, NatsRequestLogDto.RequestStatus.valueOf("ERROR"));
     }
 
     @Test
     void builder_ShouldCreateLogWithAllFields() {
         LocalDateTime now = LocalDateTime.now();
         
-        NatsRequestLog log = NatsRequestLog.builder()
+        NatsRequestLogDto log = NatsRequestLogDto.builder()
                 .requestId("req-123")
                 .correlationId("corr-456")
                 .subject("test.subject")
                 .requestPayload("{\"test\": \"data\"}")
                 .responsePayload("{\"result\": \"success\"}")
-                .status(NatsRequestLog.RequestStatus.SUCCESS)
+                .status(NatsRequestLogDto.RequestStatus.SUCCESS)
                 .requestTimestamp(now)
                 .responseTimestamp(now.plusSeconds(1))
                 .retryCount(1)
@@ -113,7 +114,7 @@ class NatsRequestLogTest {
         assertEquals("test.subject", log.getSubject());
         assertEquals("{\"test\": \"data\"}", log.getRequestPayload());
         assertEquals("{\"result\": \"success\"}", log.getResponsePayload());
-        assertEquals(NatsRequestLog.RequestStatus.SUCCESS, log.getStatus());
+        assertEquals(NatsRequestLogDto.RequestStatus.SUCCESS, log.getStatus());
         assertEquals(now, log.getRequestTimestamp());
         assertEquals(now.plusSeconds(1), log.getResponseTimestamp());
         assertEquals(1, log.getRetryCount());
@@ -123,15 +124,15 @@ class NatsRequestLogTest {
 
     @Test
     void equals_ShouldWorkCorrectlyWithId() {
-        NatsRequestLog log1 = new NatsRequestLog();
+        NatsRequestLogDto log1 = new NatsRequestLogDto();
         log1.setId(1L);
         log1.setRequestId("req-123");
         
-        NatsRequestLog log2 = new NatsRequestLog();
+        NatsRequestLogDto log2 = new NatsRequestLogDto();
         log2.setId(1L);
         log2.setRequestId("req-456");
         
-        NatsRequestLog log3 = new NatsRequestLog();
+        NatsRequestLogDto log3 = new NatsRequestLogDto();
         log3.setId(2L);
         log3.setRequestId("req-123");
         
@@ -143,10 +144,10 @@ class NatsRequestLogTest {
 
     @Test
     void hashCode_ShouldBeConsistentWithEquals() {
-        NatsRequestLog log1 = new NatsRequestLog();
+        NatsRequestLogDto log1 = new NatsRequestLogDto();
         log1.setId(1L);
         
-        NatsRequestLog log2 = new NatsRequestLog();
+        NatsRequestLogDto log2 = new NatsRequestLogDto();
         log2.setId(1L);
         
         assertEquals(log1.hashCode(), log2.hashCode());
@@ -154,10 +155,10 @@ class NatsRequestLogTest {
 
     @Test
     void toString_ShouldContainKeyFields() {
-        NatsRequestLog log = new NatsRequestLog();
+        NatsRequestLogDto log = new NatsRequestLogDto();
         log.setRequestId("req-123");
         log.setSubject("test.subject");
-        log.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+        log.setStatus(NatsRequestLogDto.RequestStatus.SUCCESS);
         
         String toString = log.toString();
         assertTrue(toString.contains("req-123"));
@@ -167,7 +168,7 @@ class NatsRequestLogTest {
 
     @Test
     void prePersist_ShouldSetTimestamps() {
-        NatsRequestLog log = new NatsRequestLog();
+        NatsRequestLogDto log = new NatsRequestLogDto();
         
         // Simulate @PrePersist callback
         LocalDateTime before = LocalDateTime.now();
@@ -185,7 +186,7 @@ class NatsRequestLogTest {
 
     @Test
     void preUpdate_ShouldUpdateTimestamp() {
-        NatsRequestLog log = new NatsRequestLog();
+        NatsRequestLogDto log = new NatsRequestLogDto();
         LocalDateTime originalCreated = LocalDateTime.now().minusHours(1);
         log.setCreatedDate(originalCreated);
         

@@ -1,7 +1,7 @@
 package com.example.natsclient.service.impl;
 
 import com.example.natsclient.config.NatsProperties;
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.exception.NatsTimeoutException;
 import com.example.natsclient.service.PayloadProcessor;
@@ -160,7 +160,7 @@ class EnhancedNatsMessageServiceTest {
 
     @Test
     void sendRequest_Success_ShouldIncrementMetrics() throws Exception {
-        NatsRequestLog mockRequestLog = new NatsRequestLog();
+        NatsRequestLogDto mockRequestLog = new NatsRequestLogDto();
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), eq(testCorrelationId)))
@@ -178,7 +178,7 @@ class EnhancedNatsMessageServiceTest {
 
     @Test
     void sendRequest_JetStreamFailure_ShouldIncrementErrorMetrics() throws Exception {
-        NatsRequestLog mockRequestLog = new NatsRequestLog();
+        NatsRequestLogDto mockRequestLog = new NatsRequestLogDto();
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), eq(testCorrelationId)))
@@ -235,7 +235,7 @@ class EnhancedNatsMessageServiceTest {
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), eq(testCorrelationId)))
-                .thenReturn(new NatsRequestLog());
+                .thenReturn(new NatsRequestLogDto());
         
         // Mock JetStream publish to throw exception for retry testing (fix signature)
         try {
@@ -267,7 +267,7 @@ class EnhancedNatsMessageServiceTest {
 
     @Test
     void publishMessage_WithMDCLogging_ShouldSetCorrectContexts() throws Exception {
-        NatsRequestLog mockRequestLog = mock(NatsRequestLog.class);
+        NatsRequestLogDto mockRequestLog = mock(NatsRequestLogDto.class);
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), isNull()))
@@ -285,7 +285,7 @@ class EnhancedNatsMessageServiceTest {
         } catch (Exception e) {
             // Ignore verification exceptions
         }
-        verify(mockRequestLog).setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+        verify(mockRequestLog).setStatus(NatsRequestLogDto.RequestStatus.SUCCESS);
         verify(mockRequestLog).setResponsePayload(contains("JetStream Publish ACK"));
         verify(requestLogService).saveRequestLog(mockRequestLog);
     }
@@ -301,7 +301,7 @@ class EnhancedNatsMessageServiceTest {
         when(payloadProcessor.serialize(any())).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(new NatsRequestLog());
+                .thenReturn(new NatsRequestLogDto());
 
         for (int i = 0; i < threadCount; i++) {
             int threadId = i;
@@ -342,7 +342,7 @@ class EnhancedNatsMessageServiceTest {
         String largeSerialized = "{\"data\":\"" + largeData.toString() + "\"}";
         byte[] largeBytes = largeSerialized.getBytes();
 
-        NatsRequestLog mockRequestLog = new NatsRequestLog();
+        NatsRequestLogDto mockRequestLog = new NatsRequestLogDto();
         when(payloadProcessor.serialize(largePayload)).thenReturn(largeSerialized);
         when(payloadProcessor.toBytes(largeSerialized)).thenReturn(largeBytes);
         when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(largeSerialized), eq(testCorrelationId)))
@@ -364,7 +364,7 @@ class EnhancedNatsMessageServiceTest {
         when(payloadProcessor.serialize(any())).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         when(requestLogService.createRequestLog(anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(new NatsRequestLog());
+                .thenReturn(new NatsRequestLogDto());
 
         Runtime runtime = Runtime.getRuntime();
         long initialMemory = runtime.totalMemory() - runtime.freeMemory();
@@ -412,7 +412,7 @@ class EnhancedNatsMessageServiceTest {
 
     @Test
     void publishMessage_ExceptionHandling_ShouldLogAndUpdateDatabase() throws Exception {
-        NatsRequestLog mockRequestLog = new NatsRequestLog();
+        NatsRequestLogDto mockRequestLog = new NatsRequestLogDto();
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         lenient().when(requestLogService.createRequestLog(anyString(), eq(testSubject), eq(serializedPayload), isNull()))

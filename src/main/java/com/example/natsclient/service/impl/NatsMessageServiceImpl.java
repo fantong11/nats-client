@@ -1,7 +1,7 @@
 package com.example.natsclient.service.impl;
 
 import com.example.natsclient.config.NatsProperties;
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.exception.NatsTimeoutException;
 import com.example.natsclient.service.NatsMessageService;
@@ -92,7 +92,7 @@ public class NatsMessageServiceImpl implements NatsMessageService {
         try {
             String jsonPayload = payloadProcessor.serialize(requestPayload);
             
-            NatsRequestLog requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, correlationId);
+            NatsRequestLogDto requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, correlationId);
             requestLogService.saveRequestLog(requestLog);
             
             logger.info("Sending NATS request - ID: {}, Subject: {}, Correlation: {}", 
@@ -145,8 +145,8 @@ public class NatsMessageServiceImpl implements NatsMessageService {
             CompletableFuture<PublishAck> publishFuture = natsOperations.publishMessage(subject, payloadBytes);
             
             return publishFuture.thenApply(publishAck -> {
-                NatsRequestLog requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, null);
-                requestLog.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+                NatsRequestLogDto requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, null);
+                requestLog.setStatus(NatsRequestLogDto.RequestStatus.SUCCESS);
                 requestLog.setResponsePayload("JetStream Publish ACK - Sequence: " + publishAck.getSeqno() + 
                                             ", Stream: " + publishAck.getStream());
                 requestLogService.saveRequestLog(requestLog);

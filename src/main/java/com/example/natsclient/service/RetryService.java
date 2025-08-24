@@ -1,8 +1,8 @@
 package com.example.natsclient.service;
 
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.exception.NatsClientException;
-import com.example.natsclient.repository.NatsRequestLogRepository;
+import com.example.natsclient.repository.JdbcNatsRequestLogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +22,7 @@ public class RetryService {
     private static final int RETRY_DELAY_MINUTES = 5;
 
     @Autowired
-    private NatsRequestLogRepository requestLogRepository;
+    private JdbcNatsRequestLogRepository requestLogRepository;
 
     @Autowired
     private NatsClientService natsClientService;
@@ -35,16 +35,16 @@ public class RetryService {
         try {
             LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(RETRY_DELAY_MINUTES);
             
-            List<NatsRequestLog> failedRequests = requestLogRepository.findByStatusAndCreatedDateBefore(
-                NatsRequestLog.RequestStatus.FAILED, cutoffTime
+            List<NatsRequestLogDto> failedRequests = requestLogRepository.findByStatusAndCreatedDateBefore(
+                NatsRequestLogDto.RequestStatus.FAILED, cutoffTime
             );
 
-            List<NatsRequestLog> timeoutRequests = requestLogRepository.findByStatusAndCreatedDateBefore(
-                NatsRequestLog.RequestStatus.TIMEOUT, cutoffTime
+            List<NatsRequestLogDto> timeoutRequests = requestLogRepository.findByStatusAndCreatedDateBefore(
+                NatsRequestLogDto.RequestStatus.TIMEOUT, cutoffTime
             );
 
-            List<NatsRequestLog> errorRequests = requestLogRepository.findByStatusAndCreatedDateBefore(
-                NatsRequestLog.RequestStatus.ERROR, cutoffTime
+            List<NatsRequestLogDto> errorRequests = requestLogRepository.findByStatusAndCreatedDateBefore(
+                NatsRequestLogDto.RequestStatus.ERROR, cutoffTime
             );
 
             int totalRetries = 0;
@@ -59,10 +59,10 @@ public class RetryService {
         }
     }
 
-    private int processRetryList(List<NatsRequestLog> requests, String type) {
+    private int processRetryList(List<NatsRequestLogDto> requests, String type) {
         int retryCount = 0;
         
-        for (NatsRequestLog request : requests) {
+        for (NatsRequestLogDto request : requests) {
             if (shouldRetry(request)) {
                 try {
                     retryRequest(request);
@@ -84,7 +84,7 @@ public class RetryService {
         return retryCount;
     }
 
-    private boolean shouldRetry(NatsRequestLog request) {
+    private boolean shouldRetry(NatsRequestLogDto request) {
         return request.getRetryCount() < MAX_RETRY_ATTEMPTS && 
                !isNonRetryableError(request.getErrorMessage());
     }
@@ -101,13 +101,13 @@ public class RetryService {
     }
 
     @Transactional
-    public void retryRequest(NatsRequestLog request) {
+    public void retryRequest(NatsRequestLogDto request) {
         logger.info("Retrying request ID: {}, attempt: {}", 
                    request.getRequestId(), request.getRetryCount() + 1);
 
         try {
             request.setRetryCount(request.getRetryCount() + 1);
-            request.setStatus(NatsRequestLog.RequestStatus.PENDING);
+            request.setStatus(NatsRequestLogDto.RequestStatus.PENDING);
             request.setUpdatedBy("RETRY_SERVICE");
             requestLogRepository.save(request);
 
@@ -137,10 +137,10 @@ public class RetryService {
     }
 
     @Transactional
-    private void handleRetrySuccess(NatsRequestLog request, String response) {
+    private void handleRetrySuccess(NatsRequestLogDto request, String response) {
         logger.info("Retry successful for request ID: {}", request.getRequestId());
         
-        request.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+        request.setStatus(NatsRequestLogDto.RequestStatus.SUCCESS);
         request.setResponsePayload(response);
         request.setResponseTimestamp(LocalDateTime.now());
         request.setErrorMessage(null);
@@ -150,15 +150,15 @@ public class RetryService {
     }
 
     @Transactional
-    private void handleRetryFailure(NatsRequestLog request, Throwable throwable) {
+    private void handleRetryFailure(NatsRequestLogDto request, Throwable throwable) {
         logger.error("Retry failed for request ID: {}, attempt: {}", 
                     request.getRequestId(), request.getRetryCount(), throwable);
 
         if (request.getRetryCount() >= MAX_RETRY_ATTEMPTS) {
-            request.setStatus(NatsRequestLog.RequestStatus.FAILED);
+            request.setStatus(NatsRequestLogDto.RequestStatus.FAILED);
             request.setErrorMessage("Max retry attempts exceeded: " + throwable.getMessage());
         } else {
-            request.setStatus(NatsRequestLog.RequestStatus.ERROR);
+            request.setStatus(NatsRequestLogDto.RequestStatus.ERROR);
             request.setErrorMessage("Retry failed: " + throwable.getMessage());
         }
         
@@ -167,8 +167,8 @@ public class RetryService {
     }
 
     @Transactional
-    private void markRetryFailed(NatsRequestLog request, String errorMessage) {
-        request.setStatus(NatsRequestLog.RequestStatus.FAILED);
+    private void markRetryFailed(NatsRequestLogDto request, String errorMessage) {
+        request.setStatus(NatsRequestLogDto.RequestStatus.FAILED);
         request.setErrorMessage("Retry process failed: " + errorMessage);
         request.setUpdatedBy("RETRY_SERVICE");
         requestLogRepository.save(request);
@@ -182,24 +182,24 @@ public class RetryService {
         try {
             LocalDateTime cutoffTime = LocalDateTime.now().minusDays(7);
             
-            List<NatsRequestLog> completedRequests = requestLogRepository.findByStatusAndCreatedDateBefore(
-                NatsRequestLog.RequestStatus.SUCCESS, cutoffTime
+            List<NatsRequestLogDto> completedRequests = requestLogRepository.findByStatusAndCreatedDateBefore(
+                NatsRequestLogDto.RequestStatus.SUCCESS, cutoffTime
             );
 
-            List<NatsRequestLog> finalFailedRequests = requestLogRepository.findByStatusAndCreatedDateBefore(
-                NatsRequestLog.RequestStatus.FAILED, cutoffTime
+            List<NatsRequestLogDto> finalFailedRequests = requestLogRepository.findByStatusAndCreatedDateBefore(
+                NatsRequestLogDto.RequestStatus.FAILED, cutoffTime
             );
 
             int deletedCount = 0;
             
-            for (NatsRequestLog request : completedRequests) {
-                requestLogRepository.delete(request);
+            for (NatsRequestLogDto request : completedRequests) {
+                requestLogRepository.deleteById(request.getId());
                 deletedCount++;
             }
             
-            for (NatsRequestLog request : finalFailedRequests) {
+            for (NatsRequestLogDto request : finalFailedRequests) {
                 if (request.getRetryCount() >= MAX_RETRY_ATTEMPTS) {
-                    requestLogRepository.delete(request);
+                    requestLogRepository.deleteById(request.getId());
                     deletedCount++;
                 }
             }

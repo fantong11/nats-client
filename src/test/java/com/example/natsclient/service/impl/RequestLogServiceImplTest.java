@@ -1,8 +1,8 @@
 package com.example.natsclient.service.impl;
 
 import com.example.natsclient.config.NatsProperties;
-import com.example.natsclient.entity.NatsRequestLog;
-import com.example.natsclient.repository.NatsRequestLogRepository;
+import com.example.natsclient.dto.NatsRequestLogDto;
+import com.example.natsclient.repository.JdbcNatsRequestLogRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,7 +21,7 @@ import static org.mockito.Mockito.lenient;
 class RequestLogServiceImplTest {
 
     @Mock
-    private NatsRequestLogRepository repository;
+    private JdbcNatsRequestLogRepository repository;
 
     @Mock
     private NatsProperties natsProperties;
@@ -49,7 +49,7 @@ class RequestLogServiceImplTest {
     @Test
     void createRequestLog_ShouldCreateValidRequestLog() {
         // Act
-        NatsRequestLog result = requestLogService.createRequestLog(
+        NatsRequestLogDto result = requestLogService.createRequestLog(
                 testRequestId, testSubject, testPayload, testCorrelationId);
 
         // Assert
@@ -66,7 +66,7 @@ class RequestLogServiceImplTest {
     @Test
     void createRequestLog_WithNullCorrelationId_ShouldWork() {
         // Act
-        NatsRequestLog result = requestLogService.createRequestLog(
+        NatsRequestLogDto result = requestLogService.createRequestLog(
                 testRequestId, testSubject, testPayload, null);
 
         // Assert
@@ -87,7 +87,7 @@ class RequestLogServiceImplTest {
         // Assert
         verify(repository).updateResponseByRequestId(
                 eq(testRequestId),
-                eq(NatsRequestLog.RequestStatus.SUCCESS),
+                eq(NatsRequestLogDto.RequestStatus.SUCCESS),
                 eq(testResponsePayload),
                 any(LocalDateTime.class),
                 eq("SYSTEM")
@@ -102,7 +102,7 @@ class RequestLogServiceImplTest {
         // Assert
         verify(repository).updateErrorByRequestId(
                 eq(testRequestId),
-                eq(NatsRequestLog.RequestStatus.TIMEOUT),
+                eq(NatsRequestLogDto.RequestStatus.TIMEOUT),
                 eq(testErrorMessage),
                 eq("SYSTEM")
         );
@@ -116,7 +116,7 @@ class RequestLogServiceImplTest {
         // Assert
         verify(repository).updateErrorByRequestId(
                 eq(testRequestId),
-                eq(NatsRequestLog.RequestStatus.ERROR),
+                eq(NatsRequestLogDto.RequestStatus.ERROR),
                 eq(testErrorMessage),
                 eq("SYSTEM")
         );
@@ -125,7 +125,7 @@ class RequestLogServiceImplTest {
     @Test
     void saveRequestLog_ShouldCallRepositorySave() {
         // Arrange
-        NatsRequestLog requestLog = new NatsRequestLog();
+        NatsRequestLogDto requestLog = new NatsRequestLogDto();
 
         // Act
         requestLogService.saveRequestLog(requestLog);
@@ -142,7 +142,7 @@ class RequestLogServiceImplTest {
         // Assert
         verify(repository).updateResponseByRequestId(
                 eq(testRequestId),
-                eq(NatsRequestLog.RequestStatus.SUCCESS),
+                eq(NatsRequestLogDto.RequestStatus.SUCCESS),
                 isNull(),
                 any(LocalDateTime.class),
                 eq("SYSTEM")
@@ -157,7 +157,7 @@ class RequestLogServiceImplTest {
         // Assert
         verify(repository).updateErrorByRequestId(
                 eq(testRequestId),
-                eq(NatsRequestLog.RequestStatus.TIMEOUT),
+                eq(NatsRequestLogDto.RequestStatus.TIMEOUT),
                 eq(""),
                 eq("SYSTEM")
         );
@@ -171,7 +171,7 @@ class RequestLogServiceImplTest {
         // Assert
         verify(repository).updateErrorByRequestId(
                 eq(testRequestId),
-                eq(NatsRequestLog.RequestStatus.ERROR),
+                eq(NatsRequestLogDto.RequestStatus.ERROR),
                 isNull(),
                 eq("SYSTEM")
         );
@@ -183,7 +183,7 @@ class RequestLogServiceImplTest {
         LocalDateTime beforeCall = LocalDateTime.now().minusSeconds(1);
         
         // Act
-        NatsRequestLog result = requestLogService.createRequestLog(
+        NatsRequestLogDto result = requestLogService.createRequestLog(
                 testRequestId, testSubject, testPayload, testCorrelationId);
         
         // Assert
@@ -199,7 +199,7 @@ class RequestLogServiceImplTest {
         String longPayload = "a".repeat(10000); // 10KB payload
         
         // Act
-        NatsRequestLog result = requestLogService.createRequestLog(
+        NatsRequestLogDto result = requestLogService.createRequestLog(
                 testRequestId, testSubject, longPayload, testCorrelationId);
 
         // Assert
@@ -213,7 +213,7 @@ class RequestLogServiceImplTest {
         String specialPayload = "{\"message\":\"Hello 世界! 🌍 Special chars: @#$%^&*()\"}";
         
         // Act
-        NatsRequestLog result = requestLogService.createRequestLog(
+        NatsRequestLogDto result = requestLogService.createRequestLog(
                 testRequestId, testSubject, specialPayload, testCorrelationId);
 
         // Assert

@@ -1,7 +1,7 @@
 package com.example.natsclient.service.impl;
 
 import com.example.natsclient.config.NatsProperties;
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
@@ -60,7 +60,7 @@ public class NatsRequestProcessor extends AbstractNatsMessageProcessor<String> {
             String jsonPayload = payloadProcessor.serialize(payload);
             
             // Create and save request log
-            NatsRequestLog requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, correlationId);
+            NatsRequestLogDto requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, correlationId);
             requestLogService.saveRequestLog(requestLog);
             
             logger.debug("Request logged to database, sending to JetStream");

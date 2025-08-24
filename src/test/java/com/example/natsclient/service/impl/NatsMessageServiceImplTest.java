@@ -1,7 +1,7 @@
 package com.example.natsclient.service.impl;
 
 import com.example.natsclient.config.NatsProperties;
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.exception.NatsTimeoutException;
 import com.example.natsclient.service.NatsOperations;
@@ -79,7 +79,7 @@ class NatsMessageServiceImplTest {
     @Test
     void sendRequest_Success_ShouldReturnSuccessfulResponse() throws Exception {
         // Arrange
-        NatsRequestLog mockRequestLog = new NatsRequestLog();
+        NatsRequestLogDto mockRequestLog = new NatsRequestLogDto();
         CompletableFuture<String> expectedResponse = CompletableFuture.completedFuture(responsePayload);
         
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
@@ -108,7 +108,7 @@ class NatsMessageServiceImplTest {
     @Test
     void sendRequest_TimeoutResponse_ShouldThrowNatsTimeoutException() throws Exception {
         // Arrange
-        NatsRequestLog mockRequestLog = new NatsRequestLog();
+        NatsRequestLogDto mockRequestLog = new NatsRequestLogDto();
         CompletableFuture<String> timeoutFuture = new CompletableFuture<>();
         timeoutFuture.completeExceptionally(new NatsTimeoutException("Request timeout", "test-id"));
         
@@ -175,7 +175,7 @@ class NatsMessageServiceImplTest {
     @Test
     void sendRequest_NatsConnectionFailure_ShouldThrowNatsRequestException() throws Exception {
         // Arrange
-        NatsRequestLog mockRequestLog = new NatsRequestLog();
+        NatsRequestLogDto mockRequestLog = new NatsRequestLogDto();
         RuntimeException connectionException = new RuntimeException("Connection failed");
         CompletableFuture<String> errorFuture = new CompletableFuture<>();
         errorFuture.completeExceptionally(new NatsRequestException("Connection failed", "test-id", connectionException));
@@ -204,7 +204,7 @@ class NatsMessageServiceImplTest {
     @Test
     void publishMessage_Success_ShouldCompleteSuccessfully() throws Exception {
         // Arrange
-        NatsRequestLog mockRequestLog = mock(NatsRequestLog.class);
+        NatsRequestLogDto mockRequestLog = mock(NatsRequestLogDto.class);
         CompletableFuture<PublishAck> publishFuture = CompletableFuture.completedFuture(mockPublishAck);
         
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);
@@ -223,7 +223,7 @@ class NatsMessageServiceImplTest {
         
         verify(requestValidator).validateRequest(testSubject, testPayload);
         verify(natsOperations).publishMessage(eq(testSubject), eq(payloadBytes));
-        verify(mockRequestLog).setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+        verify(mockRequestLog).setStatus(NatsRequestLogDto.RequestStatus.SUCCESS);
         verify(mockRequestLog).setResponsePayload(contains("JetStream Publish ACK"));
         verify(requestLogService).saveRequestLog(mockRequestLog);
     }
@@ -259,7 +259,7 @@ class NatsMessageServiceImplTest {
     @Test
     void sendRequest_WithNullCorrelationId_ShouldWork() throws Exception {
         // Arrange
-        NatsRequestLog mockRequestLog = new NatsRequestLog();
+        NatsRequestLogDto mockRequestLog = new NatsRequestLogDto();
         CompletableFuture<String> expectedResponse = CompletableFuture.completedFuture(responsePayload);
         
         when(payloadProcessor.serialize(testPayload)).thenReturn(serializedPayload);

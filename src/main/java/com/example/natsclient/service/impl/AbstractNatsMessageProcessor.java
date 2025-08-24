@@ -1,7 +1,7 @@
 package com.example.natsclient.service.impl;
 
 import com.example.natsclient.config.NatsProperties;
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;

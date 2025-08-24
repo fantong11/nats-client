@@ -1,8 +1,8 @@
 package com.example.natsclient.service;
 
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.exception.NatsClientException;
-import com.example.natsclient.repository.NatsRequestLogRepository;
+import com.example.natsclient.repository.JdbcNatsRequestLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +26,7 @@ public class NatsOrchestrationService {
     private NatsClientService natsClientService;
 
     @Autowired
-    private NatsRequestLogRepository requestLogRepository;
+    private JdbcNatsRequestLogRepository requestLogRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -128,7 +128,7 @@ public class NatsOrchestrationService {
     }
 
     public NatsRequestStatus getRequestStatus(String requestId) {
-        Optional<NatsRequestLog> requestLogOpt = requestLogRepository.findByRequestId(requestId);
+        Optional<NatsRequestLogDto> requestLogOpt = requestLogRepository.findByRequestId(requestId);
         
         if (requestLogOpt.isEmpty()) {
             throw new NatsClientException(
@@ -139,7 +139,7 @@ public class NatsOrchestrationService {
             );
         }
 
-        NatsRequestLog requestLog = requestLogOpt.get();
+        NatsRequestLogDto requestLog = requestLogOpt.get();
         
         NatsRequestStatus status = new NatsRequestStatus();
         status.setRequestId(requestLog.getRequestId());
@@ -155,7 +155,7 @@ public class NatsOrchestrationService {
     }
 
     public NatsRequestStatus getRequestStatusByCorrelationId(String correlationId) {
-        Optional<NatsRequestLog> requestLogOpt = requestLogRepository.findByCorrelationId(correlationId);
+        Optional<NatsRequestLogDto> requestLogOpt = requestLogRepository.findByCorrelationId(correlationId);
         
         if (requestLogOpt.isEmpty()) {
             throw new NatsClientException(
@@ -169,8 +169,8 @@ public class NatsOrchestrationService {
         return getRequestStatus(requestLogOpt.get().getRequestId());
     }
 
-    public List<NatsRequestStatus> getRequestsByStatus(NatsRequestLog.RequestStatus status) {
-        List<NatsRequestLog> requests = requestLogRepository.findByStatus(status);
+    public List<NatsRequestStatus> getRequestsByStatus(NatsRequestLogDto.RequestStatus status) {
+        List<NatsRequestLogDto> requests = requestLogRepository.findByStatus(status);
         
         return requests.stream()
                 .map(log -> {
@@ -191,11 +191,11 @@ public class NatsOrchestrationService {
     public NatsStatistics getStatistics() {
         NatsStatistics stats = new NatsStatistics();
         
-        stats.setPendingRequests(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.PENDING));
-        stats.setSuccessfulRequests(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.SUCCESS));
-        stats.setFailedRequests(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.FAILED));
-        stats.setTimeoutRequests(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.TIMEOUT));
-        stats.setErrorRequests(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.ERROR));
+        stats.setPendingRequests(requestLogRepository.countByStatus(NatsRequestLogDto.RequestStatus.PENDING));
+        stats.setSuccessfulRequests(requestLogRepository.countByStatus(NatsRequestLogDto.RequestStatus.SUCCESS));
+        stats.setFailedRequests(requestLogRepository.countByStatus(NatsRequestLogDto.RequestStatus.FAILED));
+        stats.setTimeoutRequests(requestLogRepository.countByStatus(NatsRequestLogDto.RequestStatus.TIMEOUT));
+        stats.setErrorRequests(requestLogRepository.countByStatus(NatsRequestLogDto.RequestStatus.ERROR));
         
         stats.setTotalRequests(
             stats.getPendingRequests() + 
@@ -303,7 +303,7 @@ public class NatsOrchestrationService {
         private String requestId;
         private String correlationId;
         private String subject;
-        private NatsRequestLog.RequestStatus status;
+        private NatsRequestLogDto.RequestStatus status;
         private LocalDateTime requestTimestamp;
         private LocalDateTime responseTimestamp;
         private Integer retryCount;

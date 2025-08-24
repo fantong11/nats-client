@@ -1,7 +1,7 @@
 package com.example.natsclient.service;
 
-import com.example.natsclient.entity.NatsRequestLog;
-import com.example.natsclient.repository.NatsRequestLogRepository;
+import com.example.natsclient.dto.NatsRequestLogDto;
+import com.example.natsclient.repository.JdbcNatsRequestLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.nats.client.Connection;
 import io.nats.client.Dispatcher;
@@ -31,7 +31,7 @@ public class NatsResponseHandler {
     private Connection natsConnection;
 
     @Autowired
-    private NatsRequestLogRepository requestLogRepository;
+    private JdbcNatsRequestLogRepository requestLogRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -105,10 +105,10 @@ public class NatsResponseHandler {
             String requestId = extractRequestId(responseData, message);
             String correlationId = extractCorrelationId(responseData, message);
             
-            Optional<NatsRequestLog> requestLogOpt = findRequestLog(requestId, correlationId);
+            Optional<NatsRequestLogDto> requestLogOpt = findRequestLog(requestId, correlationId);
             
             if (requestLogOpt.isPresent()) {
-                NatsRequestLog requestLog = requestLogOpt.get();
+                NatsRequestLogDto requestLog = requestLogOpt.get();
                 
                 if (subject.contains("success")) {
                     handleSuccessResponse(requestLog, responsePayload);
@@ -157,7 +157,7 @@ public class NatsResponseHandler {
         return correlationId;
     }
 
-    private Optional<NatsRequestLog> findRequestLog(String requestId, String correlationId) {
+    private Optional<NatsRequestLogDto> findRequestLog(String requestId, String correlationId) {
         if (requestId != null) {
             return requestLogRepository.findByRequestId(requestId);
         } else if (correlationId != null) {
@@ -166,20 +166,20 @@ public class NatsResponseHandler {
         return Optional.empty();
     }
 
-    private void handleSuccessResponse(NatsRequestLog requestLog, String responsePayload) {
+    private void handleSuccessResponse(NatsRequestLogDto requestLog, String responsePayload) {
         requestLogRepository.updateResponseByRequestId(
             requestLog.getRequestId(),
-            NatsRequestLog.RequestStatus.SUCCESS,
+            NatsRequestLogDto.RequestStatus.SUCCESS,
             responsePayload,
             LocalDateTime.now(),
             "ASYNC_HANDLER"
         );
     }
 
-    private void handleErrorResponse(NatsRequestLog requestLog, String responsePayload, Map<String, Object> responseData) {
+    private void handleErrorResponse(NatsRequestLogDto requestLog, String responsePayload, Map<String, Object> responseData) {
         String errorMessage = (String) responseData.getOrDefault("error", "Unknown error occurred");
         
-        requestLog.setStatus(NatsRequestLog.RequestStatus.FAILED);
+        requestLog.setStatus(NatsRequestLogDto.RequestStatus.FAILED);
         requestLog.setResponsePayload(responsePayload);
         requestLog.setResponseTimestamp(LocalDateTime.now());
         requestLog.setErrorMessage(errorMessage);
@@ -188,7 +188,7 @@ public class NatsResponseHandler {
         requestLogRepository.save(requestLog);
     }
 
-    private void handleDelayedResponse(NatsRequestLog requestLog, String responsePayload) {
+    private void handleDelayedResponse(NatsRequestLogDto requestLog, String responsePayload) {
         requestLog.setResponsePayload(responsePayload);
         requestLog.setResponseTimestamp(LocalDateTime.now());
         requestLog.setUpdatedBy("ASYNC_HANDLER");
@@ -198,10 +198,10 @@ public class NatsResponseHandler {
         logger.info("Received delayed response for request ID: {}", requestLog.getRequestId());
     }
 
-    private void handleGenericResponse(NatsRequestLog requestLog, String responsePayload) {
+    private void handleGenericResponse(NatsRequestLogDto requestLog, String responsePayload) {
         requestLogRepository.updateResponseByRequestId(
             requestLog.getRequestId(),
-            NatsRequestLog.RequestStatus.SUCCESS,
+            NatsRequestLogDto.RequestStatus.SUCCESS,
             responsePayload,
             LocalDateTime.now(),
             "ASYNC_HANDLER"
@@ -209,14 +209,19 @@ public class NatsResponseHandler {
     }
 
     private void logUnmatchedResponse(String subject, String responsePayload, String requestId, String correlationId) {
-        NatsRequestLog unmatchedLog = new NatsRequestLog();
-        unmatchedLog.setRequestId("UNMATCHED_" + System.currentTimeMillis());
-        unmatchedLog.setSubject(subject);
-        unmatchedLog.setResponsePayload(responsePayload);
-        unmatchedLog.setCorrelationId(correlationId);
-        unmatchedLog.setStatus(NatsRequestLog.RequestStatus.ERROR);
-        unmatchedLog.setErrorMessage("No matching request found for response");
-        unmatchedLog.setCreatedBy("ASYNC_HANDLER");
+        NatsRequestLogDto unmatchedLog = NatsRequestLogDto.builder()
+                .requestId("UNMATCHED_" + System.currentTimeMillis())
+                .subject(subject)
+                .responsePayload(responsePayload)
+                .correlationId(correlationId)
+                .status(NatsRequestLogDto.RequestStatus.ERROR)
+                .errorMessage("No matching request found for response")
+                .createdBy("ASYNC_HANDLER")
+                .updatedBy("ASYNC_HANDLER")
+                .requestTimestamp(LocalDateTime.now())
+                .responseTimestamp(LocalDateTime.now())
+                .retryCount(0)
+                .build();
         
         requestLogRepository.save(unmatchedLog);
     }

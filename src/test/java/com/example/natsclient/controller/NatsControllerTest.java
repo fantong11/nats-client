@@ -1,6 +1,6 @@
 package com.example.natsclient.controller;
 
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.service.NatsOrchestrationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -67,7 +67,7 @@ class NatsControllerTest {
         requestStatus.setRequestId("req-123");
         requestStatus.setCorrelationId("corr-123");
         requestStatus.setSubject("test.subject");
-        requestStatus.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+        requestStatus.setStatus(NatsRequestLogDto.RequestStatus.SUCCESS);
 
         // Setup statistics
         statistics = new NatsOrchestrationService.NatsStatistics();
@@ -272,7 +272,7 @@ class NatsControllerTest {
     void getRequestsByStatus_ValidStatus_ShouldReturnStatusList() throws Exception {
         // Arrange
         List<NatsOrchestrationService.NatsRequestStatus> statusList = Arrays.asList(requestStatus);
-        when(orchestrationService.getRequestsByStatus(NatsRequestLog.RequestStatus.SUCCESS))
+        when(orchestrationService.getRequestsByStatus(NatsRequestLogDto.RequestStatus.SUCCESS))
                 .thenReturn(statusList);
 
         // Act & Assert
@@ -281,7 +281,7 @@ class NatsControllerTest {
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$[0].requestId").value("req-123"));
 
-        verify(orchestrationService).getRequestsByStatus(NatsRequestLog.RequestStatus.SUCCESS);
+        verify(orchestrationService).getRequestsByStatus(NatsRequestLogDto.RequestStatus.SUCCESS);
     }
 
     @Test

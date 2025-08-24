@@ -1,7 +1,7 @@
 package com.example.natsclient.service.impl;
 
 import com.example.natsclient.config.NatsProperties;
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
@@ -62,7 +62,7 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
             PublishAck publishAck = publishToJetStream(subject, jsonPayload, correlationId);
             
             // Create and save request log with success status
-            NatsRequestLog requestLog = createSuccessfulRequestLog(requestId, subject, jsonPayload, publishAck);
+            NatsRequestLogDto requestLog = createSuccessfulRequestLog(requestId, subject, jsonPayload, publishAck);
             requestLogService.saveRequestLog(requestLog);
             
             // Update success metrics
@@ -105,9 +105,9 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
     /**
      * Create a successful request log entry with publish acknowledgment details.
      */
-    private NatsRequestLog createSuccessfulRequestLog(String requestId, String subject, String jsonPayload, PublishAck publishAck) {
-        NatsRequestLog requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, null);
-        requestLog.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+    private NatsRequestLogDto createSuccessfulRequestLog(String requestId, String subject, String jsonPayload, PublishAck publishAck) {
+        NatsRequestLogDto requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, null);
+        requestLog.setStatus(NatsRequestLogDto.RequestStatus.SUCCESS);
         requestLog.setResponsePayload("JetStream Publish ACK - Sequence: " + publishAck.getSeqno() + 
                                     ", Stream: " + publishAck.getStream());
         return requestLog;

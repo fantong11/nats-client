@@ -4,20 +4,6 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: oracle.jdbc.OracleDriver
-  
-  jpa:
-    hibernate:
-      ddl-auto: update
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.OracleDialect
-        format_sql: true
-        show_sql: true
-        use_sql_comments: true
-        type:
-          descriptor:
-            sql: TRACE
-    show-sql: true
 
   application:
     name: nats-client
@@ -116,8 +102,6 @@ info:
 logging:
   level:
     com.example.natsclient: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql: TRACE
 
 ---
 # Kubernetes Profile

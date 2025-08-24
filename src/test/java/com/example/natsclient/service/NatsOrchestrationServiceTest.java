@@ -1,8 +1,8 @@
 package com.example.natsclient.service;
 
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.exception.NatsClientException;
-import com.example.natsclient.repository.NatsRequestLogRepository;
+import com.example.natsclient.repository.JdbcNatsRequestLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,7 +30,7 @@ class NatsOrchestrationServiceTest {
     private NatsClientService natsClientService;
 
     @Mock
-    private NatsRequestLogRepository requestLogRepository;
+    private JdbcNatsRequestLogRepository requestLogRepository;
 
     @Mock
     private ObjectMapper objectMapper;
@@ -202,7 +202,7 @@ class NatsOrchestrationServiceTest {
     void getRequestStatus_ExistingRequest_ShouldReturnStatus() {
         // Arrange
         String testRequestId = "req-123";
-        NatsRequestLog mockLog = createMockRequestLog(testRequestId);
+        NatsRequestLogDto mockLog = createMockRequestLog(testRequestId);
         when(requestLogRepository.findByRequestId(testRequestId)).thenReturn(Optional.of(mockLog));
 
         // Act
@@ -232,7 +232,7 @@ class NatsOrchestrationServiceTest {
     void getRequestStatusByCorrelationId_ExistingRequest_ShouldReturnStatus() {
         // Arrange
         String testCorrelationId = "corr-456";
-        NatsRequestLog mockLog = createMockRequestLog("req-123");
+        NatsRequestLogDto mockLog = createMockRequestLog("req-123");
         mockLog.setCorrelationId(testCorrelationId);
         when(requestLogRepository.findByCorrelationId(testCorrelationId)).thenReturn(Optional.of(mockLog));
         when(requestLogRepository.findByRequestId("req-123")).thenReturn(Optional.of(mockLog));
@@ -250,8 +250,8 @@ class NatsOrchestrationServiceTest {
     @Test
     void getRequestsByStatus_ExistingRequests_ShouldReturnStatusList() {
         // Arrange
-        NatsRequestLog.RequestStatus status = NatsRequestLog.RequestStatus.SUCCESS;
-        List<NatsRequestLog> mockLogs = Arrays.asList(
+        NatsRequestLogDto.RequestStatus status = NatsRequestLogDto.RequestStatus.SUCCESS;
+        List<NatsRequestLogDto> mockLogs = Arrays.asList(
                 createMockRequestLog("req-1"),
                 createMockRequestLog("req-2")
         );
@@ -271,11 +271,11 @@ class NatsOrchestrationServiceTest {
     @Test
     void getStatistics_ShouldReturnCorrectStatistics() {
         // Arrange
-        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.SUCCESS)).thenReturn(10L);
-        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.FAILED)).thenReturn(2L);
-        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.ERROR)).thenReturn(1L);
-        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.TIMEOUT)).thenReturn(1L);
-        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.PENDING)).thenReturn(0L);
+        lenient().when(requestLogRepository.countByStatus(NatsRequestLogDto.RequestStatus.SUCCESS)).thenReturn(10L);
+        lenient().when(requestLogRepository.countByStatus(NatsRequestLogDto.RequestStatus.FAILED)).thenReturn(2L);
+        lenient().when(requestLogRepository.countByStatus(NatsRequestLogDto.RequestStatus.ERROR)).thenReturn(1L);
+        lenient().when(requestLogRepository.countByStatus(NatsRequestLogDto.RequestStatus.TIMEOUT)).thenReturn(1L);
+        lenient().when(requestLogRepository.countByStatus(NatsRequestLogDto.RequestStatus.PENDING)).thenReturn(0L);
         lenient().when(requestLogRepository.count()).thenReturn(14L);
 
         // Act
@@ -328,12 +328,12 @@ class NatsOrchestrationServiceTest {
         assertNotEquals(response1.getCorrelationId(), response2.getCorrelationId());
     }
 
-    private NatsRequestLog createMockRequestLog(String requestId) {
-        NatsRequestLog log = new NatsRequestLog();
+    private NatsRequestLogDto createMockRequestLog(String requestId) {
+        NatsRequestLogDto log = new NatsRequestLogDto();
         log.setRequestId(requestId);
         log.setSubject(testSubject);
         log.setCorrelationId("corr-" + requestId);
-        log.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
+        log.setStatus(NatsRequestLogDto.RequestStatus.SUCCESS);
         log.setCreatedDate(LocalDateTime.now());
         log.setResponseTimestamp(LocalDateTime.now());
         log.setRetryCount(0);

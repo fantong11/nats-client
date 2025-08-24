@@ -1,7 +1,7 @@
 package com.example.natsclient.demo;
 
 import com.example.natsclient.config.NatsProperties;
-import com.example.natsclient.entity.NatsRequestLog;
+import com.example.natsclient.dto.NatsRequestLogDto;
 import com.example.natsclient.service.NatsOperations;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
@@ -149,7 +149,7 @@ class NatsFunctionalityDemo {
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(serializedPayload.getBytes());
         when(payloadProcessor.fromBytes(any())).thenReturn(responsePayload);
         when(requestLogService.createRequestLog(anyString(), eq(subject), eq(serializedPayload), eq(correlationId)))
-                .thenReturn(new NatsRequestLog());
+                .thenReturn(new NatsRequestLogDto());
         when(natsConnection.request(eq(subject), any(byte[].class), any(Duration.class)))
                 .thenReturn(mockMessage);
         when(mockMessage.getData()).thenReturn(responsePayload.getBytes());
@@ -165,7 +165,7 @@ class NatsFunctionalityDemo {
         verify(requestValidator).validateRequest(subject, payload);
         verify(requestValidator).validateCorrelationId(correlationId);
         verify(natsConnection).request(eq(subject), any(byte[].class), any(Duration.class));
-        verify(requestLogService).saveRequestLog(any(NatsRequestLog.class));
+        verify(requestLogService).saveRequestLog(any(NatsRequestLogDto.class));
         verify(requestLogService).updateWithSuccess(anyString(), eq(responsePayload));
         
         System.out.println("✅ 原始服務測試通過!");
@@ -190,7 +190,7 @@ class NatsFunctionalityDemo {
         when(payloadProcessor.serialize(payload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(serializedPayload.getBytes());
         when(requestLogService.createRequestLog(anyString(), eq(subject), eq(serializedPayload), eq(correlationId)))
-                .thenReturn(new NatsRequestLog());
+                .thenReturn(new NatsRequestLogDto());
 
         // 執行請求
         CompletableFuture<String> result = enhancedService.sendRequest(subject, payload, correlationId);
@@ -202,7 +202,7 @@ class NatsFunctionalityDemo {
         // 驗證基本調用
         verify(requestValidator).validateRequest(subject, payload);
         verify(requestValidator).validateCorrelationId(correlationId);
-        verify(requestLogService).saveRequestLog(any(NatsRequestLog.class));
+        verify(requestLogService).saveRequestLog(any(NatsRequestLogDto.class));
         verify(requestLogService).updateWithSuccess(anyString(), eq("Message published to JetStream successfully - processing asynchronously"));
         
         System.out.println("✅ 增強版服務測試通過!");
@@ -226,7 +226,7 @@ class NatsFunctionalityDemo {
         when(payloadProcessor.serialize(payload)).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(serializedPayload.getBytes());
         when(requestLogService.createRequestLog(anyString(), eq(subject), eq(serializedPayload), isNull()))
-                .thenReturn(new NatsRequestLog());
+                .thenReturn(new NatsRequestLogDto());
         try {
             when(jetStream.publish(eq(subject), any(byte[].class), any(PublishOptions.class)))
                     .thenReturn(mockPublishAck);
@@ -254,7 +254,7 @@ class NatsFunctionalityDemo {
         } catch (Exception e) {
             // Ignore verification exceptions
         }
-        verify(requestLogService, times(2)).saveRequestLog(any(NatsRequestLog.class));
+        verify(requestLogService, times(2)).saveRequestLog(any(NatsRequestLogDto.class));
         
         System.out.println("✅ 發布功能測試通過!");
         System.out.println("   - 主題: " + subject);
