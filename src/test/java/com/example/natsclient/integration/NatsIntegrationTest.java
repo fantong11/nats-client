@@ -1,6 +1,7 @@
 package com.example.natsclient.integration;
 
 import com.example.natsclient.NatsClientApplication;
+import com.example.natsclient.config.TestNatsConfig;
 import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.repository.NatsRequestLogRepository;
 import com.example.natsclient.service.NatsOrchestrationService;
@@ -10,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureWebMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
@@ -34,14 +35,13 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(classes = NatsClientApplication.class)
+@SpringBootTest(classes = {NatsClientApplication.class, TestNatsConfig.class}, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureWebMvc
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
-        "spring.datasource.url=jdbc:h2:mem:testdb",
+        "spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.jpa.hibernate.ddl-auto=create-drop",
-        "nats.url=nats://mock-nats:4222",
         "spring.main.allow-bean-definition-overriding=true"
 })
 @Transactional
@@ -50,26 +50,29 @@ public class NatsIntegrationTest {
     @Autowired
     private WebApplicationContext webApplicationContext;
 
-    @MockBean
+    @MockitoBean
     private Connection natsConnection;
 
-    @MockBean
+    @MockitoBean
     private JetStream jetStream;
 
-    @MockBean
+    @MockitoBean
+    private JetStreamManagement jetStreamManagement;
+
+    @MockitoBean
     private PublishAck mockPublishAck;
     
-    @MockBean
-    private JetStreamManagement jetStreamManagement;
-    
-    @MockBean
+    @MockitoBean
     private NatsEventPublisher natsEventPublisher;
     
-    @MockBean
+    @MockitoBean
     private LoggingEventObserver loggingEventObserver;
     
-    @MockBean
+    @MockitoBean
     private MetricsEventObserver metricsEventObserver;
+    
+    @MockitoBean
+    private com.example.natsclient.service.NatsResponseHandler natsResponseHandler;
 
     @Autowired
     private NatsRequestLogRepository requestLogRepository;
@@ -108,11 +111,15 @@ public class NatsIntegrationTest {
                 }
                 """;
 
-        // Mock NATS response
+        // Mock JetStream request
         io.nats.client.Message mockMessage = mock(io.nats.client.Message.class);
         when(mockMessage.getData()).thenReturn("{\"status\":\"success\",\"message\":\"integration test response\"}".getBytes());
-        when(natsConnection.request(eq("integration.test"), any(byte[].class), any()))
-                .thenReturn(mockMessage);
+        try {
+            when(jetStream.request(eq("integration.test"), any(byte[].class), any()))
+                    .thenReturn(mockMessage);
+        } catch (Exception e) {
+            // Ignore for test setup
+        }
 
         // Act
         mockMvc.perform(post("/api/nats/request")
@@ -130,7 +137,6 @@ public class NatsIntegrationTest {
         assertEquals("integration.test", savedRequest.getSubject());
         assertEquals(NatsRequestLog.RequestStatus.SUCCESS, savedRequest.getStatus());
         assertNotNull(savedRequest.getRequestId());
-        assertNotNull(savedRequest.getCorrelationId());
         assertNotNull(savedRequest.getResponsePayload());
     }
 
@@ -150,7 +156,7 @@ public class NatsIntegrationTest {
         when(mockPublishAck.getSeqno()).thenReturn(1L);
         when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
         try {
-            when(jetStream.publish(eq("integration.publish"), any(), any(byte[].class), any(PublishOptions.class)))
+            when(jetStream.publish(eq("integration.publish"), any(), any(byte[].class)))
                     .thenReturn(mockPublishAck);
         } catch (Exception e) {
             // Ignore for test setup
@@ -165,7 +171,7 @@ public class NatsIntegrationTest {
 
         // Assert JetStream publish was called
         try {
-            verify(jetStream).publish(eq("integration.publish"), any(byte[].class), any(PublishOptions.class));
+            verify(jetStream).publish(eq("integration.publish"), any(), any(byte[].class));
         } catch (Exception e) {
             // Ignore verification exceptions
         }
@@ -186,7 +192,6 @@ public class NatsIntegrationTest {
         testRequest.setRequestId("test-req-123");
         testRequest.setSubject("test.status");
         testRequest.setRequestPayload("{\"test\":\"data\"}");
-        testRequest.setCorrelationId("test-corr-456");
         testRequest.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
         testRequest.setCreatedBy("TEST");
         
@@ -196,7 +201,6 @@ public class NatsIntegrationTest {
         mockMvc.perform(get("/api/nats/status/{requestId}", "test-req-123"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.requestId").value("test-req-123"))
-                .andExpect(jsonPath("$.correlationId").value("test-corr-456"))
                 .andExpect(jsonPath("$.subject").value("test.status"))
                 .andExpect(jsonPath("$.status").value("SUCCESS"));
     }
@@ -290,7 +294,6 @@ public class NatsIntegrationTest {
         log.setRequestId(requestId);
         log.setSubject("test.subject");
         log.setRequestPayload("{\"test\":\"data\"}");
-        log.setCorrelationId("corr-" + requestId);
         log.setStatus(status);
         log.setCreatedBy("TEST");
         

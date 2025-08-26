@@ -37,7 +37,6 @@ class ConfigurationPropertiesTest {
         
         // Test JetStream properties
         assertTrue(natsProperties.getJetStream().isEnabled());
-        assertEquals("TEST_STREAM", natsProperties.getJetStream().getStream().getDefaultName());
         assertEquals("$JS.API", natsProperties.getJetStream().getPrefix());
         
         // Test connection properties
@@ -86,7 +85,6 @@ class ConfigurationPropertiesTest {
         assertEquals("nats://localhost:4222", natsProperties.getUrl());
         assertEquals("nats-client-service", natsProperties.getConnectionName());
         assertTrue(natsProperties.getJetStream().isEnabled());
-        assertEquals("DEFAULT_STREAM", natsProperties.getJetStream().getStream().getDefaultName());
         assertEquals("$JS.API", natsProperties.getJetStream().getPrefix());
         assertEquals(10000, natsProperties.getConnection().getTimeout());
         assertTrue(natsProperties.getLogging().isEnableConnectionEvents());

@@ -9,7 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -33,7 +33,7 @@ class NatsControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private NatsOrchestrationService orchestrationService;
 
     @Autowired
@@ -48,7 +48,7 @@ class NatsControllerTest {
     void setUp() {
         // Setup success response
         successResponse = new NatsOrchestrationService.NatsRequestResponse();
-        successResponse.setCorrelationId("corr-123");
+        successResponse.setRequestId("req-123");
         successResponse.setSubject("test.subject");
         successResponse.setSuccess(true);
         successResponse.setResponsePayload("{\"status\":\"success\"}");
@@ -56,7 +56,7 @@ class NatsControllerTest {
 
         // Setup failure response
         failureResponse = new NatsOrchestrationService.NatsRequestResponse();
-        failureResponse.setCorrelationId("corr-456");
+        failureResponse.setRequestId("req-456");
         failureResponse.setSubject("test.error");
         failureResponse.setSuccess(false);
         failureResponse.setErrorMessage("Test error");
@@ -65,7 +65,6 @@ class NatsControllerTest {
         // Setup request status
         requestStatus = new NatsOrchestrationService.NatsRequestStatus();
         requestStatus.setRequestId("req-123");
-        requestStatus.setCorrelationId("corr-123");
         requestStatus.setSubject("test.subject");
         requestStatus.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
 
@@ -103,7 +102,6 @@ class NatsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.subject").value("test.subject"))
-                .andExpect(jsonPath("$.correlationId").value("corr-123"))
                 .andExpect(jsonPath("$.responsePayload").value("{\"status\":\"success\"}"));
 
         verify(orchestrationService).sendRequestWithTracking(any(NatsOrchestrationService.NatsRequest.class));
@@ -246,27 +244,12 @@ class NatsControllerTest {
         mockMvc.perform(get("/api/nats/status/{requestId}", requestId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.requestId").value(requestId))
-                .andExpect(jsonPath("$.correlationId").value("corr-123"))
                 .andExpect(jsonPath("$.subject").value("test.subject"))
                 .andExpect(jsonPath("$.status").value("SUCCESS"));
 
         verify(orchestrationService).getRequestStatus(requestId);
     }
 
-    @Test
-    void getRequestStatusByCorrelationId_ExistingRequest_ShouldReturnStatus() throws Exception {
-        // Arrange
-        String correlationId = "corr-123";
-        when(orchestrationService.getRequestStatusByCorrelationId(correlationId)).thenReturn(requestStatus);
-
-        // Act & Assert
-        mockMvc.perform(get("/api/nats/status/correlation/{correlationId}", correlationId))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.correlationId").value(correlationId))
-                .andExpect(jsonPath("$.requestId").value("req-123"));
-
-        verify(orchestrationService).getRequestStatusByCorrelationId(correlationId);
-    }
 
     @Test
     void getRequestsByStatus_ValidStatus_ShouldReturnStatusList() throws Exception {

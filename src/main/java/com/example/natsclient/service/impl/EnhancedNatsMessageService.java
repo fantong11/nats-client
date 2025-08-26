@@ -5,7 +5,7 @@ import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.service.NatsMessageService;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
-import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
+import com.example.natsclient.util.NatsMessageUtils;
 import com.example.natsclient.service.factory.MetricsFactory;
 import com.example.natsclient.service.observer.NatsEventPublisher;
 import com.example.natsclient.service.validator.RequestValidator;
@@ -52,17 +52,17 @@ public class EnhancedNatsMessageService implements NatsMessageService {
             NatsProperties natsProperties,
             MeterRegistry meterRegistry,
             MetricsFactory metricsFactory,
-            NatsPublishOptionsBuilder publishOptionsBuilder,
+            NatsMessageUtils messageUtils,
             NatsEventPublisher eventPublisher) {
         
         // Initialize specialized processors using Template Method, Factory, Builder, and Observer patterns
         this.requestProcessor = new NatsRequestProcessor(
                 jetStream, requestLogService, payloadProcessor, 
-                requestValidator, natsProperties, meterRegistry, metricsFactory, publishOptionsBuilder, eventPublisher);
+                requestValidator, natsProperties, meterRegistry, metricsFactory, messageUtils, eventPublisher);
         
         this.publishProcessor = new NatsPublishProcessor(
                 jetStream, requestLogService, payloadProcessor,
-                requestValidator, natsProperties, meterRegistry, metricsFactory, publishOptionsBuilder, eventPublisher);
+                requestValidator, natsProperties, meterRegistry, metricsFactory, messageUtils, eventPublisher);
     }
     
     
@@ -73,9 +73,9 @@ public class EnhancedNatsMessageService implements NatsMessageService {
         maxAttempts = 3,
         backoff = @Backoff(delay = 1000, multiplier = 2)
     )
-    public CompletableFuture<String> sendRequest(String subject, Object requestPayload, String correlationId) {
+    public CompletableFuture<String> sendRequest(String subject, Object requestPayload) {
         logger.info("Delegating request processing to specialized processor - Subject: {}", subject);
-        return requestProcessor.processMessage(subject, requestPayload, correlationId);
+        return requestProcessor.processMessage(subject, requestPayload);
     }
     
     
@@ -83,6 +83,6 @@ public class EnhancedNatsMessageService implements NatsMessageService {
     @Async
     public CompletableFuture<Void> publishMessage(String subject, Object messagePayload) {
         logger.info("Delegating publish processing to specialized processor - Subject: {}", subject);
-        return publishProcessor.processMessage(subject, messagePayload, null);
+        return publishProcessor.processMessage(subject, messagePayload);
     }
 }

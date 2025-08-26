@@ -4,7 +4,7 @@ import com.example.natsclient.entity.NatsRequestLog;
 
 public interface RequestLogService {
     
-    NatsRequestLog createRequestLog(String requestId, String subject, String payload, String correlationId);
+    NatsRequestLog createRequestLog(String requestId, String subject, String payload);
     
     void updateWithSuccess(String requestId, String responsePayload);
     

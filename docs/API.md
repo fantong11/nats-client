@@ -60,7 +60,7 @@ Responses vary by endpoint but generally follow these patterns:
 **Success Response (NATS Request)**:
 ```json
 {
-  "correlationId": "CORR-uuid",
+  "requestId": "REQ-uuid",
   "subject": "test.api", 
   "success": true,
   "responsePayload": "response data or timeout message",
@@ -114,7 +114,6 @@ Responses vary by endpoint but generally follow these patterns:
 | NATS Operations | POST | `/api/nats/request` | 發送NATS請求並等待響應 |
 | NATS Operations | POST | `/api/nats/publish` | 發布消息到NATS JetStream |
 | Request Tracking | GET | `/api/nats/status/{requestId}` | 根據請求ID查詢狀態 |
-| Request Tracking | GET | `/api/nats/status/correlation/{correlationId}` | 根據相關ID查詢狀態 |
 | Request Tracking | GET | `/api/nats/requests/{status}` | 根據狀態查詢請求列表 |
 | Statistics | GET | `/api/nats/statistics` | 獲取NATS統計信息 |
 | Health Check | GET | `/api/nats/health` | 檢查服務健康狀態 |
@@ -131,15 +130,14 @@ Sends a message to NATS JetStream and processes it asynchronously with the Enhan
 ```json
 {
   "subject": "string (required)",
-  "payload": "object (required)",
-  "correlationId": "string (optional - auto-generated if not provided)"
+  "payload": "object (required)"
 }
 ```
 
 #### Success Response
 ```json
 {
-  "correlationId": "CORR-e2ae7364-9673-460a-9634-1787f1e57739",
+  "requestId": "REQ-e2ae7364-9673-460a-9634-1787f1e57739",
   "subject": "test.k8s",
   "success": false,
   "responsePayload": null,
@@ -171,7 +169,7 @@ curl -X POST http://localhost:8080/api/nats/request \
       "message": "Hello NATS!",
       "timestamp": "2025-08-23T07:00:00Z"
     },
-    "correlationId": "test-123"
+    "requestId": "REQ-test-123"
   }'
 ```
 
@@ -221,12 +219,12 @@ curl -X POST http://localhost:8080/api/nats/publish \
 ```
 
 ### Get Request Status
-Retrieves the status of a specific request by correlation ID.
+Retrieves the status of a specific request by request ID.
 
-**GET** `/status/{correlationId}`
+**GET** `/status/{requestId}`
 
 #### Path Parameters
-- `correlationId` (string, required): Correlation ID of the request
+- `requestId` (string, required): Request ID of the request (REQ-{UUID} format)
 
 #### Success Response (Found)
 ```json
@@ -343,7 +341,7 @@ curl -X GET http://localhost:8080/actuator/health/readiness
 ### Common Error Types
 - **Validation Errors**: Missing required fields (subject, payload)
 - **NATS Timeout**: No response received within timeout period
-- **Request Not Found**: Status lookup for non-existent correlation ID
+- **Request Not Found**: Status lookup for non-existent request ID
 
 ## 🏗️ Current Architecture Features
 
@@ -363,10 +361,10 @@ The current implementation uses an **Enhanced NATS Message Service** with the fo
 - **MetricsFactory**: Centralized creation of Micrometer metrics
 - **NatsMetricsSet**: Grouped metrics for requests, successes, errors, and timers
 
-#### **Hybrid NATS Operations**
-- **NATS Core**: Used for request-response operations (optimal performance)
-- **JetStream**: Used for publish operations (reliable delivery and persistence)
-- **Auto-correlation**: Automatic generation of correlation IDs if not provided
+#### **JetStream-First Operations**
+- **JetStream-First**: All NATS operations use JetStream for consistency and reliability
+- **Auto-generation**: Automatic generation of request IDs in REQ-{UUID} format
+- **Simplified Architecture**: Single ID system for better tracking and reduced complexity
 
 #### **Advanced Monitoring**
 - **Real-time Statistics**: Live calculation of success rates, error counts
@@ -410,7 +408,7 @@ curl http://localhost:8080/actuator/health
 curl http://localhost:8080/api/nats/statistics
 
 # Check specific request status
-curl http://localhost:8080/api/nats/status/your-correlation-id
+curl http://localhost:8080/api/nats/status/REQ-your-request-id
 ```
 
 This API documentation reflects the current implementation as of **August 2025** with enhanced patterns, comprehensive monitoring, and production-ready features.

@@ -210,13 +210,12 @@ curl -X POST http://localhost:8080/api/nats/request \
     "message": "Hello Enhanced NATS from K8s",
     "requestId": "k8s-test-001",
     "processingMode": "Template Method Pattern"
-  },
-  "correlationId": "K8S-TEST-001"
+  }
 }'
 
 # 期望回應 (可能會超時因為沒有訂閱者):
 # {
-#   "correlationId": "K8S-TEST-001",
+#   "requestId": "REQ-K8S-TEST-001",
 #   "subject": "test.k8s",
 #   "success": false,
 #   "responsePayload": null,
@@ -238,7 +237,7 @@ curl -X POST http://localhost:8080/api/nats/request \
 
 # 期望超時回應:
 # {
-#   "correlationId": "CORR-xxx",
+#   "requestId": "REQ-xxx",
 #   "subject": "test.nobody.listens", 
 #   "success": false,
 #   "responsePayload": null,
@@ -341,8 +340,8 @@ curl -X POST http://localhost:8080/api/nats/publish \
 # 期望回應: "Message published successfully"
 ```
 
-### 2. 雙重架構測試 (Hybrid Operations)
-Enhanced Service 使用智能路由：NATS Core 用於請求-回應，JetStream 用於發布操作
+### 2. JetStream-First 架構測試
+Enhanced Service 統一使用 JetStream 提供一致的可靠性和持久性
 
 ```bash
 # 請求操作 (使用 NatsRequestProcessor + JetStream)
@@ -354,8 +353,7 @@ curl -X POST http://localhost:8080/api/nats/request \
   "payload": {
     "message": "Hybrid Architecture Test",
     "requestType": "JetStream Request"
-  },
-  "correlationId": "HYBRID-K8S-001"
+  }
 }'
 
 # Enhanced Service 通過 Template Method 自動處理
@@ -565,7 +563,7 @@ Enhanced Features 驗證：
 #### 成功的 JetStream 處理回應 (Template Method)
 ```json
 {
-  "correlationId": "CORR-6515a0cc-32b0-43e1-bf9f-88c1d7b5d7ae",
+  "requestId": "REQ-6515a0cc-32b0-43e1-bf9f-88c1d7b5d7ae",
   "subject": "test.k8s",
   "success": true,
   "responsePayload": "Message published to JetStream successfully - processing asynchronously",
@@ -577,7 +575,7 @@ Enhanced Features 驗證：
 #### 超時的 Enhanced NATS 回應
 ```json
 {
-  "correlationId": "CORR-190b92f4-a98a-4648-a042-f10bd1d1bcdb",
+  "requestId": "REQ-190b92f4-a98a-4648-a042-f10bd1d1bcdb",
   "subject": "test.k8s",
   "success": false,
   "responsePayload": null,

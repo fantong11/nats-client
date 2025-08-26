@@ -26,12 +26,11 @@ public class RequestLogServiceImpl implements RequestLogService {
     }
     
     @Override
-    public NatsRequestLog createRequestLog(String requestId, String subject, String payload, String correlationId) {
+    public NatsRequestLog createRequestLog(String requestId, String subject, String payload) {
         NatsRequestLog requestLog = NatsRequestLog.builder()
                 .requestId(requestId)
                 .subject(subject)
                 .requestPayload(payload)
-                .correlationId(correlationId)
                 .status(NatsRequestLog.RequestStatus.PENDING)
                 .requestTimestamp(LocalDateTime.now())
                 .retryCount(0)

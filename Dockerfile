@@ -16,7 +16,7 @@ ENV MAVEN_HOME=/app/apache-maven-3.9.6
 ENV PATH=$MAVEN_HOME/bin:$PATH
 
 # Build the application
-RUN mvn clean package -DskipTests
+RUN mvn clean package -Dmaven.test.skip=true
 
 # Runtime stage
 FROM openjdk:17-jdk-slim

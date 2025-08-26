@@ -6,8 +6,6 @@ import io.nats.client.JetStreamManagement;
 import io.nats.client.JetStreamOptions;
 import io.nats.client.Nats;
 import io.nats.client.Options;
-import io.nats.client.api.StreamConfiguration;
-import io.nats.client.api.StorageType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -96,12 +94,6 @@ public class NatsConfig {
     @Bean
     public JetStreamManagement jetStreamManagement(Connection connection) throws IOException, InterruptedException {
         JetStreamManagement jsm = connection.jetStreamManagement();
-        
-        // Create default stream if JetStream is enabled
-        if (natsProperties.getJetStream().isEnabled()) {
-            createDefaultStreamIfNotExists(jsm);
-        }
-        
         log.info("JetStreamManagement initialized");
         return jsm;
     }
@@ -130,44 +122,4 @@ public class NatsConfig {
         return js;
     }
 
-    private void createDefaultStreamIfNotExists(JetStreamManagement jsm) {
-        try {
-            String streamName = natsProperties.getJetStream().getStream().getDefaultName();
-            
-            // Check if stream already exists
-            try {
-                jsm.getStreamInfo(streamName);
-                log.info("Stream '{}' already exists", streamName);
-                return;
-            } catch (Exception e) {
-                // Stream doesn't exist, create it
-                log.info("Creating default stream: {}", streamName);
-            }
-
-            String storageTypeStr = natsProperties.getJetStream().getStream().getStorage();
-            StorageType storage = "FILE".equalsIgnoreCase(storageTypeStr) 
-                    ? StorageType.File : StorageType.Memory;
-
-            // 從 application.yml 配置取得 subjects
-            String[] subjects = natsProperties.getJetStream().getStream().getSubjects()
-                    .toArray(new String[0]);
-
-            StreamConfiguration streamConfig = StreamConfiguration.builder()
-                    .name(streamName)
-                    .subjects(subjects)
-                    .storageType(storage)
-                    .maxAge(Duration.ofMillis(natsProperties.getJetStream().getStream().getMaxAge()))
-                    .maxMessages(natsProperties.getJetStream().getStream().getMaxMsgs())
-                    .replicas(natsProperties.getJetStream().getStream().getReplicas())
-                    .build();
-
-            jsm.addStream(streamConfig);
-            log.info("Successfully created stream '{}' with subjects: {}", streamName, 
-                    String.join(", ", subjects));
-            
-        } catch (Exception e) {
-            log.error("Failed to create default stream", e);
-            throw new RuntimeException("Failed to initialize JetStream default stream", e);
-        }
-    }
 }

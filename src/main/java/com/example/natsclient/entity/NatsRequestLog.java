@@ -60,8 +60,6 @@ public class NatsRequestLog {
     @Column(name = "TIMEOUT_DURATION")
     private Long timeoutDuration;
 
-    @Column(name = "CORRELATION_ID")
-    private String correlationId;
 
     @Column(name = "CREATED_BY")
     private String createdBy;

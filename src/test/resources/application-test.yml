@@ -20,14 +20,24 @@ spring:
       enabled: true
 
 nats:
-  url: nats://mock-nats:4222  # Will be mocked in tests
+  url: nats://localhost:4222  # Will be mocked in tests
   connection:
     timeout: 5000
     reconnect:
       wait: 1000
       max-attempts: 3
+    ping-interval: 10000
+    request-cleanup-interval: 5000
+    max-control-line: 1024
+    no-echo: false
   request:
     timeout: 10000
+  jetstream:
+    default-timeout: 5000
+    publish-ack:
+      timeout: 5000
+    subscribe:
+      ack-timeout: 30000
 
 logging:
   level:

@@ -5,7 +5,7 @@ import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.exception.NatsRequestException;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
-import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
+import com.example.natsclient.util.NatsMessageUtils;
 import com.example.natsclient.service.factory.MetricsFactory;
 import com.example.natsclient.service.observer.NatsEventPublisher;
 import com.example.natsclient.service.validator.RequestValidator;
@@ -32,7 +32,7 @@ public class NatsRequestProcessor extends AbstractNatsMessageProcessor<String> {
     private static final Logger logger = LoggerFactory.getLogger(NatsRequestProcessor.class);
     
     private final JetStream jetStream;
-    private final NatsPublishOptionsBuilder publishOptionsBuilder;
+    private final NatsMessageUtils messageUtils;
     
     public NatsRequestProcessor(
             JetStream jetStream,
@@ -42,31 +42,31 @@ public class NatsRequestProcessor extends AbstractNatsMessageProcessor<String> {
             NatsProperties natsProperties,
             MeterRegistry meterRegistry,
             MetricsFactory metricsFactory,
-            NatsPublishOptionsBuilder publishOptionsBuilder,
+            NatsMessageUtils messageUtils,
             NatsEventPublisher eventPublisher) {
         
         super(requestLogService, payloadProcessor, requestValidator, 
               natsProperties, meterRegistry, metricsFactory, eventPublisher, "jetstream_request");
         this.jetStream = jetStream;
-        this.publishOptionsBuilder = publishOptionsBuilder;
+        this.messageUtils = messageUtils;
     }
     
     @Override
     protected CompletableFuture<String> executeSpecificProcessing(
-            String requestId, String subject, Object payload, String correlationId, Instant startTime) {
+            String requestId, String subject, Object payload, Instant startTime) {
         
         try {
             // Serialize payload
             String jsonPayload = payloadProcessor.serialize(payload);
             
             // Create and save request log
-            NatsRequestLog requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, correlationId);
+            NatsRequestLog requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload);
             requestLogService.saveRequestLog(requestLog);
             
             logger.debug("Request logged to database, sending to JetStream");
             
-            // Send to JetStream with correlation ID as message ID
-            Message response = sendJetStreamRequest(subject, jsonPayload, correlationId);
+            // Send to JetStream with request ID as message ID
+            Message response = sendJetStreamRequest(subject, jsonPayload, requestId);
             
             if (response != null) {
                 return handleSynchronousResponse(requestId, response, startTime);
@@ -83,23 +83,21 @@ public class NatsRequestProcessor extends AbstractNatsMessageProcessor<String> {
     /**
      * Send request to JetStream for reliable, durable processing using Builder pattern.
      */
-    private Message sendJetStreamRequest(String subject, String jsonPayload, String correlationId) throws Exception {
+    private Message sendJetStreamRequest(String subject, String jsonPayload, String requestId) throws Exception {
         byte[] payloadBytes = payloadProcessor.toBytes(jsonPayload);
         
         logger.debug("Publishing request message to JetStream with subject: {}", subject);
         
-        // Use correlation ID as message ID for deduplication
-        String messageId = correlationId != null ? correlationId : NatsMessageHeaders.generateMessageId("req");
+        // Use request ID as message ID for deduplication
+        String messageId = requestId;
         
         // Create headers with message ID
         Headers headers = NatsMessageHeaders.createHeadersWithMessageId(messageId);
         
-        // Use Builder pattern for critical request operations
-        PublishOptions publishOptions = publishOptionsBuilder.createCritical();
-        
-        PublishAck publishAck = jetStream.publish(subject, headers, payloadBytes, publishOptions);
+        // Publish without specifying stream - let JetStream route based on subject
+        PublishAck publishAck = jetStream.publish(subject, headers, payloadBytes);
         logger.debug("JetStream request message published with ID '{}' - {}", 
-                    messageId, publishOptionsBuilder.formatPublishAck(publishAck));
+                    messageId, messageUtils.formatPublishAck(publishAck));
         
         // In JetStream architecture, responses come asynchronously through consumers
         // Return null to indicate async processing
@@ -166,8 +164,4 @@ public class NatsRequestProcessor extends AbstractNatsMessageProcessor<String> {
         return "jetstream_request";
     }
     
-    @Override
-    protected boolean requiresCorrelationIdValidation() {
-        return true; // Request operations require correlation ID validation
-    }
 }

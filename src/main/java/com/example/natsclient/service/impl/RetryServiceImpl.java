@@ -53,8 +53,7 @@ public class RetryServiceImpl {
             
             natsMessageService.sendRequest(
                 failedRequest.getSubject(), 
-                failedRequest.getRequestPayload(), 
-                failedRequest.getCorrelationId()
+                failedRequest.getRequestPayload()
             );
             
         } catch (Exception e) {

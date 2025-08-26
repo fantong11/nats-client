@@ -16,9 +16,4 @@ public class RequestValidator {
         }
     }
     
-    public void validateCorrelationId(String correlationId) {
-        if (correlationId != null && correlationId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Correlation ID cannot be empty if provided");
-        }
-    }
 }

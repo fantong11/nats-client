@@ -14,7 +14,6 @@ class NatsRequestLogTest {
         
         assertNull(log.getId());
         assertNull(log.getRequestId());
-        assertNull(log.getCorrelationId());
         assertNull(log.getSubject());
         assertNull(log.getRequestPayload());
         assertNull(log.getResponsePayload());
@@ -34,7 +33,6 @@ class NatsRequestLogTest {
         
         Long id = 1L;
         String requestId = "req-123";
-        String correlationId = "corr-456";
         String subject = "test.subject";
         String requestPayload = "{\"test\": \"data\"}";
         String responsePayload = "{\"result\": \"success\"}";
@@ -49,7 +47,6 @@ class NatsRequestLogTest {
         
         log.setId(id);
         log.setRequestId(requestId);
-        log.setCorrelationId(correlationId);
         log.setSubject(subject);
         log.setRequestPayload(requestPayload);
         log.setResponsePayload(responsePayload);
@@ -64,7 +61,6 @@ class NatsRequestLogTest {
         
         assertEquals(id, log.getId());
         assertEquals(requestId, log.getRequestId());
-        assertEquals(correlationId, log.getCorrelationId());
         assertEquals(subject, log.getSubject());
         assertEquals(requestPayload, log.getRequestPayload());
         assertEquals(responsePayload, log.getResponsePayload());
@@ -96,7 +92,6 @@ class NatsRequestLogTest {
         
         NatsRequestLog log = NatsRequestLog.builder()
                 .requestId("req-123")
-                .correlationId("corr-456")
                 .subject("test.subject")
                 .requestPayload("{\"test\": \"data\"}")
                 .responsePayload("{\"result\": \"success\"}")
@@ -109,7 +104,6 @@ class NatsRequestLogTest {
                 .build();
         
         assertEquals("req-123", log.getRequestId());
-        assertEquals("corr-456", log.getCorrelationId());
         assertEquals("test.subject", log.getSubject());
         assertEquals("{\"test\": \"data\"}", log.getRequestPayload());
         assertEquals("{\"result\": \"success\"}", log.getResponsePayload());

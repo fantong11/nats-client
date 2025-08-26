@@ -113,8 +113,7 @@ public class RetryService {
 
             CompletableFuture<String> future = natsClientService.sendRequest(
                 request.getSubject(), 
-                request.getRequestPayload(), 
-                request.getCorrelationId()
+                request.getRequestPayload()
             );
 
             future.whenComplete((response, throwable) -> {

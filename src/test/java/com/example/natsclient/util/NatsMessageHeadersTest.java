@@ -37,28 +37,24 @@ class NatsMessageHeadersTest {
     }
 
     @Test
-    void createHeadersWithIds_ShouldSetBothIds() {
+    void createHeadersWithIds_ShouldSetMessageId() {
         String messageId = "msg-123";
-        String correlationId = "corr-456";
         
-        Headers headers = NatsMessageHeaders.createHeadersWithIds(messageId, correlationId);
+        Headers headers = NatsMessageHeaders.createHeadersWithIds(messageId);
         
         assertNotNull(headers);
         assertEquals(messageId, headers.getFirst(NatsMessageHeaders.NATS_MSG_ID));
-        assertEquals(correlationId, headers.getFirst(NatsMessageHeaders.NATS_CORRELATION_ID));
     }
 
     @Test
     void createComprehensiveHeaders_ShouldIncludeAllFields() {
         String messageId = "msg-123";
-        String correlationId = "corr-456";
         String sourceService = "test-service";
         
-        Headers headers = NatsMessageHeaders.createComprehensiveHeaders(messageId, correlationId, sourceService);
+        Headers headers = NatsMessageHeaders.createComprehensiveHeaders(messageId, sourceService);
         
         assertNotNull(headers);
         assertEquals(messageId, headers.getFirst(NatsMessageHeaders.NATS_MSG_ID));
-        assertEquals(correlationId, headers.getFirst(NatsMessageHeaders.NATS_CORRELATION_ID));
         assertEquals(sourceService, headers.getFirst(NatsMessageHeaders.CUSTOM_SOURCE_SERVICE));
         assertNotNull(headers.getFirst(NatsMessageHeaders.NATS_TIMESTAMP));
     }

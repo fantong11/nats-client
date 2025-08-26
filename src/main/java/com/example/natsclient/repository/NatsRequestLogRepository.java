@@ -16,7 +16,6 @@ public interface NatsRequestLogRepository extends JpaRepository<NatsRequestLog, 
 
     Optional<NatsRequestLog> findByRequestId(String requestId);
 
-    Optional<NatsRequestLog> findByCorrelationId(String correlationId);
 
     List<NatsRequestLog> findByStatus(NatsRequestLog.RequestStatus status);
 

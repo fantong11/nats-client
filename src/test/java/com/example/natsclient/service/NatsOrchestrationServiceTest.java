@@ -63,7 +63,7 @@ class NatsOrchestrationServiceTest {
             .thenReturn(parsedResponse);
             
         CompletableFuture<String> natsResponseFuture = CompletableFuture.completedFuture(testResponse);
-        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload), anyString()))
+        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload)))
                 .thenReturn(natsResponseFuture);
 
         // Act
@@ -81,18 +81,18 @@ class NatsOrchestrationServiceTest {
         Map<String, Object> expectedPayload = Map.of("status", "success");
         assertEquals(expectedPayload, response.getResponsePayload());
         
-        assertNotNull(response.getCorrelationId());
+        assertNotNull(response.getRequestId());
         assertNotNull(response.getTimestamp());
         assertNull(response.getErrorMessage());
 
-        verify(natsClientService).sendRequest(eq(testSubject), eq(testPayload), anyString());
+        verify(natsClientService).sendRequest(eq(testSubject), eq(testPayload));
     }
 
     @Test
     void sendRequestWithTracking_NullResponse_ShouldReturnFailureResponse() throws Exception {
         // Arrange
         CompletableFuture<String> natsResponseFuture = CompletableFuture.completedFuture(null);
-        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload), anyString()))
+        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload)))
                 .thenReturn(natsResponseFuture);
 
         // Act
@@ -107,7 +107,7 @@ class NatsOrchestrationServiceTest {
         assertEquals(testSubject, response.getSubject());
         assertNull(response.getResponsePayload());
         assertEquals("No response received", response.getErrorMessage());
-        assertNotNull(response.getCorrelationId());
+        assertNotNull(response.getRequestId());
         assertNotNull(response.getTimestamp());
     }
 
@@ -118,7 +118,7 @@ class NatsOrchestrationServiceTest {
         CompletableFuture<String> failedFuture = new CompletableFuture<>();
         failedFuture.completeExceptionally(testException);
         
-        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload), anyString()))
+        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload)))
                 .thenReturn(failedFuture);
 
         // Act
@@ -133,7 +133,7 @@ class NatsOrchestrationServiceTest {
         assertEquals(testSubject, response.getSubject());
         assertNull(response.getResponsePayload());
         assertEquals("java.lang.RuntimeException: Test exception", response.getErrorMessage());
-        assertNotNull(response.getCorrelationId());
+        assertNotNull(response.getRequestId());
         assertNotNull(response.getTimestamp());
     }
 
@@ -155,10 +155,10 @@ class NatsOrchestrationServiceTest {
         assertFalse(response.isSuccess());
         assertEquals("", response.getSubject());
         assertNotNull(response.getErrorMessage());
-        assertNotNull(response.getCorrelationId());
+        assertNotNull(response.getRequestId());
         assertNotNull(response.getTimestamp());
 
-        verify(natsClientService, never()).sendRequest(anyString(), any(), anyString());
+        verify(natsClientService, never()).sendRequest(anyString(), any());
     }
 
     @Test
@@ -211,7 +211,6 @@ class NatsOrchestrationServiceTest {
         // Assert
         assertNotNull(result);
         assertEquals(testRequestId, result.getRequestId());
-        assertEquals(mockLog.getCorrelationId(), result.getCorrelationId());
         assertEquals(mockLog.getSubject(), result.getSubject());
         assertEquals(mockLog.getStatus(), result.getStatus());
     }
@@ -228,24 +227,6 @@ class NatsOrchestrationServiceTest {
         });
     }
 
-    @Test
-    void getRequestStatusByCorrelationId_ExistingRequest_ShouldReturnStatus() {
-        // Arrange
-        String testCorrelationId = "corr-456";
-        NatsRequestLog mockLog = createMockRequestLog("req-123");
-        mockLog.setCorrelationId(testCorrelationId);
-        when(requestLogRepository.findByCorrelationId(testCorrelationId)).thenReturn(Optional.of(mockLog));
-        when(requestLogRepository.findByRequestId("req-123")).thenReturn(Optional.of(mockLog));
-
-        // Act
-        NatsOrchestrationService.NatsRequestStatus result = 
-                orchestrationService.getRequestStatusByCorrelationId(testCorrelationId);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(testCorrelationId, result.getCorrelationId());
-        assertEquals(mockLog.getRequestId(), result.getRequestId());
-    }
 
     @Test
     void getRequestsByStatus_ExistingRequests_ShouldReturnStatusList() {
@@ -309,10 +290,10 @@ class NatsOrchestrationServiceTest {
     }
 
     @Test
-    void sendRequestWithTracking_GeneratesUniqueCorrelationIds() throws Exception {
+    void sendRequestWithTracking_GeneratesUniqueRequestIds() throws Exception {
         // Arrange
         CompletableFuture<String> natsResponseFuture = CompletableFuture.completedFuture(testResponse);
-        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload), anyString()))
+        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload)))
                 .thenReturn(natsResponseFuture);
 
         // Act
@@ -325,14 +306,13 @@ class NatsOrchestrationServiceTest {
         NatsOrchestrationService.NatsRequestResponse response1 = result1.get();
         NatsOrchestrationService.NatsRequestResponse response2 = result2.get();
         
-        assertNotEquals(response1.getCorrelationId(), response2.getCorrelationId());
+        assertNotEquals(response1.getRequestId(), response2.getRequestId());
     }
 
     private NatsRequestLog createMockRequestLog(String requestId) {
         NatsRequestLog log = new NatsRequestLog();
         log.setRequestId(requestId);
         log.setSubject(testSubject);
-        log.setCorrelationId("corr-" + requestId);
         log.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
         log.setCreatedDate(LocalDateTime.now());
         log.setResponseTimestamp(LocalDateTime.now());

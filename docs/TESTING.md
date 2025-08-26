@@ -326,7 +326,6 @@ public class TestDataBuilder {
     public static NatsRequestLog createTestRequestLog() {
         return NatsRequestLog.builder()
             .requestId(UUID.randomUUID().toString())
-            .correlationId("test-correlation")
             .subject("test.subject")
             .payload("{\"test\":\"data\"}")
             .status(RequestStatus.PENDING)
@@ -340,9 +339,9 @@ public class TestDataBuilder {
 ```sql
 -- test-data.sql
 INSERT INTO nats_request_log (
-    request_id, correlation_id, subject, payload, status, created_at
+    request_id, subject, payload, status, created_at
 ) VALUES (
-    'test-001', 'corr-001', 'test.subject', '{"test":"data"}', 'SUCCESS', CURRENT_TIMESTAMP
+    'REQ-test-001', 'test.subject', '{"test":"data"}', 'SUCCESS', CURRENT_TIMESTAMP
 );
 ```
 

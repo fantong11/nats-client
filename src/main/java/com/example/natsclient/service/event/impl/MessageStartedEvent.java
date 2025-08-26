@@ -10,18 +10,15 @@ import java.util.Map;
 public class MessageStartedEvent extends NatsMessageEvent {
     
     private final Object payload;
-    private final String correlationId;
     
     public MessageStartedEvent(String eventId, String requestId, String subject, 
-                              String operationType, Object payload, String correlationId,
+                              String operationType, Object payload,
                               Map<String, Object> metadata) {
         super(eventId, requestId, subject, operationType, metadata);
         this.payload = payload;
-        this.correlationId = correlationId;
     }
     
     public Object getPayload() { return payload; }
-    public String getCorrelationId() { return correlationId; }
     
     @Override
     public String getEventType() {

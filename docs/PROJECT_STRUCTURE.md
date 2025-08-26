@@ -15,7 +15,7 @@ nats-client/
 ├── 📄 k8s-deploy-all.yml          # Kubernetes 部署配置
 ├── 📄 pom.xml                      # Maven 專案配置
 ├── 📄 README.md                    # 主要專案說明
-└── 📄 test-api.http                # API 測試腳本
+└── 📄 api-tests.http               # API 測試腳本
 ```
 
 ## 📚 文件資料夾 (`docs/`)
@@ -133,8 +133,9 @@ service/
 └── 📁 validator/                       # 請求驗證
 ```
 
-###### 建造者模式 (`service/builder/`)
-- **NatsPublishOptionsBuilder.java**: JetStream 發布選項建造者
+###### 工具類別 (`util/`)
+- **NatsMessageHeaders.java**: NATS 消息標頭處理
+- **NatsMessageUtils.java**: NATS 消息格式化和處理
 
 ###### 工廠模式 (`service/factory/`)
 - **MetricsFactory.java**: Micrometer 指標工廠
@@ -142,11 +143,8 @@ service/
 
 ###### 服務實作 (`service/impl/`) - Enhanced Architecture
 - **AbstractNatsMessageProcessor.java**: Template Method 基礎處理器
-- **EnhancedNatsMessageService.java**: 企業級 NATS 訊息服務 (主要服務)
-- **HybridNatsOperations.java**: 雙模式操作 (NATS Core + JetStream)
+- **EnhancedNatsMessageService.java**: 企業級 NATS 訊息服務 (主要服務，JetStream-first)
 - **JsonPayloadProcessor.java**: JSON 載荷處理實作
-- **K8sCredentialServiceImpl.java**: Kubernetes 憑證管理
-- **NatsMessageServiceImpl.java**: 原始 NATS 訊息實作 (向下兼容)
 - **NatsPublishProcessor.java**: 發布專用處理器 (Template Method)
 - **NatsRequestProcessor.java**: 請求專用處理器 (Template Method)
 - **RequestLogServiceImpl.java**: 資料庫記錄實作
@@ -158,8 +156,9 @@ service/
 ###### 驗證器 (`service/validator/`)
 - **RequestValidator.java**: API 請求的輸入驗證
 
-##### `util/` - 工具類別 (新增)
-- **CorrelationIdGenerator.java**: 關聯 ID 生成工具
+##### `util/` - 工具類別
+- **NatsMessageHeaders.java**: NATS 消息標頭處理工具
+- **NatsMessageUtils.java**: NATS 消息處理輔助工具
 
 ### 應用程式資源 (`src/main/resources/`)
 
@@ -276,7 +275,7 @@ target/
 - **pom.xml**: Maven 專案配置，包含相依性、外掛程式和設定檔
 
 ### API 測試
-- **test-api.http**: 包含 25+ API 測試情境的 HTTP 客戶端檔案
+- **api-tests.http**: 包含 30+ API 測試情境的 HTTP 客戶端檔案
 
 ### 文件
 - **README.md**: 主要專案文件，包含快速開始和導覽
@@ -318,16 +317,16 @@ MetricsFactory (指標工廠)
 - **實現**: 按服務類型創建標準化的指標集合
 - **優勢**: 一致的指標命名、集中配置、易於維護
 
-### Hybrid Operations (雙模式操作)
+### JetStream-First Architecture (統一架構)
 ```
-HybridNatsOperations
-├── NATS Core (用於請求-回應)
-└── JetStream (用於發布操作)
+EnhancedNatsMessageService
+├── NatsRequestProcessor (JetStream 請求處理)
+└── NatsPublishProcessor (JetStream 發布處理)
 ```
 
-- **目的**: 根據操作類型選擇最適合的 NATS 模式
-- **實現**: 請求使用 NATS Core (效能)，發布使用 JetStream (可靠性)
-- **優勢**: 效能和可靠性的最佳平衡
+- **目的**: 統一使用 JetStream 提供一致的可靠性和持久性
+- **實現**: 所有 NATS 操作都通過 JetStream 進行
+- **優勢**: 統一的消息語義、簡化的架構、更好的可靠性
 
 ## 🎯 Enhanced 開發指導原則
 
@@ -364,13 +363,14 @@ HybridNatsOperations
 - **Factory Pattern**: `MetricsFactory` 集中指標管理
 - **Builder Pattern**: `NatsPublishOptionsBuilder` JetStream 配置建造
 
-#### 新增核心類別
-- `EnhancedNatsMessageService.java` - 主要企業級服務
-- `HybridNatsOperations.java` - 雙模式 NATS 操作
+#### 核心類別
+- `EnhancedNatsMessageService.java` - 主要企業級服務 (JetStream-first)
 - `NatsRequestProcessor.java` - 請求專用處理器
 - `NatsPublishProcessor.java` - 發布專用處理器
 - `MetricsFactory.java` - Micrometer 指標工廠
 - `NatsEventPublisher.java` - 事件發布者
+- `NatsMessageHeaders.java` - 消息標頭處理工具
+- `NatsMessageUtils.java` - 消息處理輔助工具
 
 #### Enhanced 測試套件
 - **100+ 測試案例**: 全面覆蓋所有設計模式
@@ -381,17 +381,18 @@ HybridNatsOperations
 #### 監控和可觀測性
 - **Micrometer 整合**: 實時指標收集
 - **成功率計算**: 動態統計分析
-- **關聯 ID 追蹤**: 端到端請求追蹤
+- **請求 ID 追蹤**: 端到端請求追蹤 (REQ-{UUID} 格式)
 - **事件驅動監控**: Observer 模式支援的可擴展監控
 
-### 向下相容性
-- 保留原始 `NatsMessageServiceImpl` 以支援現有集成
+### 架構簡化
+- 移除複雜的雙模式操作，統一使用 JetStream
+- 簡化 ID 系統，只使用 requestId
 - API 端點保持不變
-- 配置格式向下相容
+- 配置簡化，移除不必要的 stream 配置
 
 ---
 
 **版本**: Enhanced NATS Client v0.0.1-SNAPSHOT  
 **更新日期**: 2025年8月23日  
-**架構**: Template Method + Observer + Factory + Hybrid Operations  
+**架構**: Template Method + Observer + Factory + JetStream-First  
 **測試覆蓋**: 100+ 測試案例，包含企業級性能和可靠性驗證

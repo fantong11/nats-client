@@ -73,7 +73,6 @@ public class NatsProperties {
         
         private PublishAck publishAck = new PublishAck();
         private Subscribe subscribe = new Subscribe();
-        private StreamConfig stream = new StreamConfig();
 
         @Data
         public static class PublishAck {
@@ -88,15 +87,5 @@ public class NatsProperties {
             private String deliverPolicy = "NEW";
         }
 
-        @Data
-        public static class StreamConfig {
-            private String defaultName = "DEFAULT_STREAM";
-            private List<String> subjects = List.of("jetstream.>", "js.>", "stream.>");
-            private String storage = "MEMORY";
-            private long maxAge = 86400000; // 24 hours in milliseconds
-            private int maxMsgs = 100000;
-            private boolean replicate = false;
-            private int replicas = 1;
-        }
     }
 }

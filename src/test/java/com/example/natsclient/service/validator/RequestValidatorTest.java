@@ -97,83 +97,6 @@ class RequestValidatorTest {
     }
 
     @Test
-    void validateCorrelationId_ValidId_ShouldNotThrowException() {
-        // Act & Assert
-        assertDoesNotThrow(() -> {
-            requestValidator.validateCorrelationId("valid-correlation-id-123");
-        });
-    }
-
-    @Test
-    void validateCorrelationId_NullId_ShouldNotThrowException() {
-        // Act & Assert
-        assertDoesNotThrow(() -> {
-            requestValidator.validateCorrelationId(null);
-        });
-    }
-
-    @Test
-    void validateCorrelationId_EmptyString_ShouldThrowIllegalArgumentException() {
-        // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
-            requestValidator.validateCorrelationId("");
-        });
-
-        assertEquals("Correlation ID cannot be empty if provided", exception.getMessage());
-    }
-
-    @Test
-    void validateCorrelationId_WhitespaceOnlyString_ShouldThrowIllegalArgumentException() {
-        // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
-            requestValidator.validateCorrelationId("   ");
-        });
-
-        assertEquals("Correlation ID cannot be empty if provided", exception.getMessage());
-    }
-
-    @Test
-    void validateCorrelationId_TabAndNewlineString_ShouldThrowIllegalArgumentException() {
-        // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
-            requestValidator.validateCorrelationId("\t\n\r");
-        });
-
-        assertEquals("Correlation ID cannot be empty if provided", exception.getMessage());
-    }
-
-    @Test
-    void validateCorrelationId_ValidIdWithSpecialChars_ShouldNotThrowException() {
-        // Arrange
-        String specialCorrelationId = "corr-123_abc-def.ghi@domain.com";
-
-        // Act & Assert
-        assertDoesNotThrow(() -> {
-            requestValidator.validateCorrelationId(specialCorrelationId);
-        });
-    }
-
-    @Test
-    void validateCorrelationId_UUIDFormat_ShouldNotThrowException() {
-        // Arrange
-        String uuidCorrelationId = "550e8400-e29b-41d4-a716-446655440000";
-
-        // Act & Assert
-        assertDoesNotThrow(() -> {
-            requestValidator.validateCorrelationId(uuidCorrelationId);
-        });
-    }
-
-    @Test
-    void validateRequest_BothValid_ShouldNotThrowException() {
-        // Act & Assert
-        assertDoesNotThrow(() -> {
-            requestValidator.validateRequest("test.subject", validPayload);
-            requestValidator.validateCorrelationId("correlation-123");
-        });
-    }
-
-    @Test
     void validateRequest_ValidWithComplexPayload_ShouldNotThrowException() {
         // Arrange
         ComplexPayload complexPayload = new ComplexPayload("name", 42, true);
@@ -203,17 +126,6 @@ class RequestValidatorTest {
         // Act & Assert
         assertDoesNotThrow(() -> {
             requestValidator.validateRequest(longSubject, validPayload);
-        });
-    }
-
-    @Test
-    void validateCorrelationId_LongValidId_ShouldNotThrowException() {
-        // Arrange
-        String longCorrelationId = "correlation-" + "a".repeat(1000);
-
-        // Act & Assert
-        assertDoesNotThrow(() -> {
-            requestValidator.validateCorrelationId(longCorrelationId);
         });
     }
 

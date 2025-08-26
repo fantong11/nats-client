@@ -32,23 +32,22 @@ public class NatsOrchestrationService {
     private ObjectMapper objectMapper;
 
     public CompletableFuture<NatsRequestResponse> sendRequestWithTracking(NatsRequest request) {
-        String correlationId = generateCorrelationId();
+        String requestId = generateRequestId();
         
-        log.info("Processing NATS request - Subject: {}, CorrelationID: {}", 
-                   request.getSubject(), correlationId);
+        log.info("Processing NATS request - Subject: {}, RequestID: {}", 
+                   request.getSubject(), requestId);
 
         try {
             validateRequest(request);
             
             CompletableFuture<String> natsResponse = natsClientService.sendRequest(
                 request.getSubject(), 
-                request.getPayload(), 
-                correlationId
+                request.getPayload()
             );
 
             return natsResponse.thenApply(response -> {
                 NatsRequestResponse result = new NatsRequestResponse();
-                result.setCorrelationId(correlationId);
+                result.setRequestId(requestId);
                 result.setSubject(request.getSubject());
                 result.setSuccess(response != null);
                 
@@ -72,7 +71,7 @@ public class NatsOrchestrationService {
                 log.error("Error processing NATS request", throwable);
                 
                 NatsRequestResponse errorResult = new NatsRequestResponse();
-                errorResult.setCorrelationId(correlationId);
+                errorResult.setRequestId(requestId);
                 errorResult.setSubject(request.getSubject());
                 errorResult.setSuccess(false);
                 errorResult.setErrorMessage(throwable.getMessage());
@@ -86,7 +85,7 @@ public class NatsOrchestrationService {
             
             CompletableFuture<NatsRequestResponse> errorFuture = new CompletableFuture<>();
             NatsRequestResponse errorResult = new NatsRequestResponse();
-            errorResult.setCorrelationId(correlationId);
+            errorResult.setRequestId(requestId);
             errorResult.setSubject(request.getSubject());
             errorResult.setSuccess(false);
             errorResult.setErrorMessage(e.getMessage());
@@ -143,7 +142,6 @@ public class NatsOrchestrationService {
         
         NatsRequestStatus status = new NatsRequestStatus();
         status.setRequestId(requestLog.getRequestId());
-        status.setCorrelationId(requestLog.getCorrelationId());
         status.setSubject(requestLog.getSubject());
         status.setStatus(requestLog.getStatus());
         status.setRequestTimestamp(requestLog.getRequestTimestamp());
@@ -154,20 +152,6 @@ public class NatsOrchestrationService {
         return status;
     }
 
-    public NatsRequestStatus getRequestStatusByCorrelationId(String correlationId) {
-        Optional<NatsRequestLog> requestLogOpt = requestLogRepository.findByCorrelationId(correlationId);
-        
-        if (requestLogOpt.isEmpty()) {
-            throw new NatsClientException(
-                "Request not found for correlation ID",
-                null,
-                null,
-                NatsClientException.ErrorType.VALIDATION_ERROR
-            );
-        }
-
-        return getRequestStatus(requestLogOpt.get().getRequestId());
-    }
 
     public List<NatsRequestStatus> getRequestsByStatus(NatsRequestLog.RequestStatus status) {
         List<NatsRequestLog> requests = requestLogRepository.findByStatus(status);
@@ -176,7 +160,6 @@ public class NatsOrchestrationService {
                 .map(log -> {
                     NatsRequestStatus requestStatus = new NatsRequestStatus();
                     requestStatus.setRequestId(log.getRequestId());
-                    requestStatus.setCorrelationId(log.getCorrelationId());
                     requestStatus.setSubject(log.getSubject());
                     requestStatus.setStatus(log.getStatus());
                     requestStatus.setRequestTimestamp(log.getRequestTimestamp());
@@ -272,8 +255,8 @@ public class NatsOrchestrationService {
         }
     }
 
-    private String generateCorrelationId() {
-        return "CORR-" + UUID.randomUUID().toString();
+    private String generateRequestId() {
+        return "REQ-" + UUID.randomUUID().toString();
     }
 
     @Data
@@ -290,7 +273,7 @@ public class NatsOrchestrationService {
 
     @Data
     public static class NatsRequestResponse {
-        private String correlationId;
+        private String requestId;
         private String subject;
         private boolean success;
         private Object responsePayload;
@@ -301,7 +284,6 @@ public class NatsOrchestrationService {
     @Data
     public static class NatsRequestStatus {
         private String requestId;
-        private String correlationId;
         private String subject;
         private NatsRequestLog.RequestStatus status;
         private LocalDateTime requestTimestamp;

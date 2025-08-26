@@ -4,7 +4,7 @@ import com.example.natsclient.config.NatsProperties;
 import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
-import com.example.natsclient.service.builder.NatsPublishOptionsBuilder;
+import com.example.natsclient.util.NatsMessageUtils;
 import com.example.natsclient.service.factory.MetricsFactory;
 import com.example.natsclient.service.impl.EnhancedNatsMessageService;
 import com.example.natsclient.service.observer.NatsEventPublisher;
@@ -66,8 +66,6 @@ class NatsPerformanceTest {
     @Mock
     private NatsProperties.JetStream jetStreamProperties;
 
-    @Mock
-    private NatsProperties.JetStream.StreamConfig streamProperties;
 
     @Mock
     private MeterRegistry meterRegistry;
@@ -79,7 +77,7 @@ class NatsPerformanceTest {
     private MetricsFactory metricsFactory;
 
     @Mock
-    private NatsPublishOptionsBuilder publishOptionsBuilder;
+    private NatsMessageUtils messageUtils;
 
     @Mock
     private NatsEventPublisher eventPublisher;
@@ -99,8 +97,7 @@ class NatsPerformanceTest {
         lenient().when(natsProperties.getRequest()).thenReturn(requestProperties);
         lenient().when(requestProperties.getTimeout()).thenReturn(30000L);
         lenient().when(natsProperties.getJetStream()).thenReturn(jetStreamProperties);
-        lenient().when(jetStreamProperties.getStream()).thenReturn(streamProperties);
-        lenient().when(streamProperties.getDefaultName()).thenReturn("DEFAULT_STREAM");
+        // Removed stream properties - no longer needed
         lenient().when(mockPublishAck.getSeqno()).thenReturn(1L);
         lenient().when(mockPublishAck.getStream()).thenReturn("DEFAULT_STREAM");
         
@@ -117,27 +114,26 @@ class NatsPerformanceTest {
         when(metricsFactory.createNatsMetricsSet(anyString(), eq(meterRegistry))).thenReturn(metricsSet);
         
         PublishOptions mockPublishOptions = mock(PublishOptions.class);
-        lenient().when(publishOptionsBuilder.createDefault()).thenReturn(mockPublishOptions);
-        lenient().when(publishOptionsBuilder.createCritical()).thenReturn(mockPublishOptions);
+        lenient().when(messageUtils.formatPublishAck(any())).thenReturn("MockPublishAck{}");
         
         natsService = new EnhancedNatsMessageService(
                 natsConnection, jetStream, requestLogService, payloadProcessor, 
                 requestValidator, natsProperties, meterRegistry, metricsFactory,
-                publishOptionsBuilder, eventPublisher);
+                messageUtils, eventPublisher);
 
         // Essential mocks for payload processing
         when(payloadProcessor.serialize(any())).thenReturn(serializedPayload);
         when(payloadProcessor.toBytes(serializedPayload)).thenReturn(payloadBytes);
         lenient().when(payloadProcessor.fromBytes(responseBytes)).thenReturn(responsePayload);
-        when(requestLogService.createRequestLog(anyString(), anyString(), anyString(), anyString()))
+        when(requestLogService.createRequestLog(anyString(), anyString(), anyString()))
                 .thenReturn(new NatsRequestLog());
         
         // Essential mocks for NATS operations
         try {
             lenient().when(natsConnection.request(anyString(), any(byte[].class), any(Duration.class)))
                     .thenReturn(mockMessage);
-            // Fix the jetStream.publish mock to match the actual method signature (subject, headers, payloadBytes, publishOptions)
-            when(jetStream.publish(anyString(), any(), any(byte[].class), any(PublishOptions.class)))
+            // Fix the jetStream.publish mock to match the actual method signature (subject, headers, payloadBytes)
+            when(jetStream.publish(anyString(), any(), any(byte[].class)))
                     .thenReturn(mockPublishAck);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -167,8 +163,7 @@ class NatsPerformanceTest {
                 try {
                     CompletableFuture<String> result = natsService.sendRequest(
                             testSubject + "." + requestId, 
-                            testPayload, 
-                            "corr-" + requestId
+                            testPayload
                     );
                     result.get(5, TimeUnit.SECONDS);
                     successCount.incrementAndGet();
@@ -210,8 +205,7 @@ class NatsPerformanceTest {
             
             CompletableFuture<String> result = natsService.sendRequest(
                     testSubject + ".latency." + i, 
-                    testPayload, 
-                    "latency-corr-" + i
+                    testPayload
             );
             result.get();
             
@@ -263,8 +257,7 @@ class NatsPerformanceTest {
                         try {
                             CompletableFuture<String> result = natsService.sendRequest(
                                     testSubject + ".stress." + threadId + "." + j, 
-                                    testPayload, 
-                                    "stress-corr-" + threadId + "-" + j
+                                    testPayload
                             );
                             result.get(10, TimeUnit.SECONDS);
                             successes++;
@@ -323,8 +316,7 @@ class NatsPerformanceTest {
         for (int i = 0; i < iterations; i++) {
             CompletableFuture<String> result = natsService.sendRequest(
                     testSubject + ".memory." + i, 
-                    testPayload, 
-                    "memory-corr-" + i
+                    testPayload
             );
             result.get();
             
@@ -381,8 +373,7 @@ class NatsPerformanceTest {
                 try {
                     CompletableFuture<String> result = natsService.sendRequest(
                             testSubject + ".balance." + requestId, 
-                            testPayload, 
-                            "balance-corr-" + requestId
+                            testPayload
                     );
                     result.get(5, TimeUnit.SECONDS);
                     threadRequestCounts[threadIndex].incrementAndGet();

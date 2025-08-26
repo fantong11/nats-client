@@ -23,8 +23,8 @@ public class NatsClientService {
         this.retryService = retryService;
     }
 
-    public CompletableFuture<String> sendRequest(String subject, Object requestPayload, String correlationId) {
-        return natsMessageService.sendRequest(subject, requestPayload, correlationId);
+    public CompletableFuture<String> sendRequest(String subject, Object requestPayload) {
+        return natsMessageService.sendRequest(subject, requestPayload);
     }
 
     public CompletableFuture<Void> publishMessage(String subject, Object messagePayload) {

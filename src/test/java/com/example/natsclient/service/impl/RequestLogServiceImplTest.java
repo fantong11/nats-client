@@ -35,7 +35,6 @@ class RequestLogServiceImplTest {
     private final String testRequestId = "req-123";
     private final String testSubject = "test.subject";
     private final String testPayload = "{\"data\":\"test\"}";
-    private final String testCorrelationId = "corr-456";
     private final String testResponsePayload = "{\"status\":\"success\"}";
     private final String testErrorMessage = "Test error message";
     private final long testTimeout = 30000L;
@@ -50,34 +49,18 @@ class RequestLogServiceImplTest {
     void createRequestLog_ShouldCreateValidRequestLog() {
         // Act
         NatsRequestLog result = requestLogService.createRequestLog(
-                testRequestId, testSubject, testPayload, testCorrelationId);
+                testRequestId, testSubject, testPayload);
 
         // Assert
         assertNotNull(result);
         assertEquals(testRequestId, result.getRequestId());
         assertEquals(testSubject, result.getSubject());
         assertEquals(testPayload, result.getRequestPayload());
-        assertEquals(testCorrelationId, result.getCorrelationId());
         assertEquals(testTimeout, result.getTimeoutDuration());
         assertEquals("SYSTEM", result.getCreatedBy());
         assertNotNull(result.getRequestTimestamp());
     }
 
-    @Test
-    void createRequestLog_WithNullCorrelationId_ShouldWork() {
-        // Act
-        NatsRequestLog result = requestLogService.createRequestLog(
-                testRequestId, testSubject, testPayload, null);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(testRequestId, result.getRequestId());
-        assertEquals(testSubject, result.getSubject());
-        assertEquals(testPayload, result.getRequestPayload());
-        assertNull(result.getCorrelationId());
-        assertEquals(testTimeout, result.getTimeoutDuration());
-        assertEquals("SYSTEM", result.getCreatedBy());
-    }
 
     @Test
     void updateWithSuccess_ShouldCallRepositoryWithCorrectParameters() {
@@ -184,7 +167,7 @@ class RequestLogServiceImplTest {
         
         // Act
         NatsRequestLog result = requestLogService.createRequestLog(
-                testRequestId, testSubject, testPayload, testCorrelationId);
+                testRequestId, testSubject, testPayload);
         
         // Assert
         LocalDateTime afterCall = LocalDateTime.now().plusSeconds(1);
@@ -200,7 +183,7 @@ class RequestLogServiceImplTest {
         
         // Act
         NatsRequestLog result = requestLogService.createRequestLog(
-                testRequestId, testSubject, longPayload, testCorrelationId);
+                testRequestId, testSubject, longPayload);
 
         // Assert
         assertEquals(longPayload, result.getRequestPayload());
@@ -214,7 +197,7 @@ class RequestLogServiceImplTest {
         
         // Act
         NatsRequestLog result = requestLogService.createRequestLog(
-                testRequestId, testSubject, specialPayload, testCorrelationId);
+                testRequestId, testSubject, specialPayload);
 
         // Assert
         assertEquals(specialPayload, result.getRequestPayload());

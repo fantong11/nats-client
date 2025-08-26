@@ -141,7 +141,7 @@ graph TB
 - **NatsOrchestrationService**: 業務邏輯編排和請求追蹤
 - 功能：
   - 請求驗證和預處理
-  - 相關ID生成和管理
+  - 請求ID生成和管理
   - 統計數據收集
   - 錯誤處理和響應封裝
 
@@ -174,15 +174,16 @@ graph TB
 ```java
 // AbstractNatsMessageProcessor 定義處理流程模板
 public abstract class AbstractNatsMessageProcessor<T> {
-    public final CompletableFuture<T> processMessage(String subject, Object payload, String correlationId) {
-        // 1. 驗證
-        // 2. 預處理  
-        // 3. 執行具體處理 (抽象方法)
-        // 4. 後處理
-        // 5. 事件發布
+    public final CompletableFuture<T> processMessage(String subject, Object payload) {
+        // 1. 生成requestId
+        // 2. 驗證
+        // 3. 預處理  
+        // 4. 執行具體處理 (抽象方法)
+        // 5. 後處理
+        // 6. 事件發布
     }
     
-    protected abstract CompletableFuture<T> executeSpecificProcessing(...);
+    protected abstract CompletableFuture<T> executeSpecificProcessing(String requestId, String subject, Object payload, Instant startTime);
 }
 ```
 
@@ -263,9 +264,10 @@ public class ExponentialBackoffRetryStrategy implements RetryStrategy {
 - 事件驅動的通知機制
 
 ### 3. 請求追蹤系統
-- 唯一請求ID和相關ID
+- 唯一請求ID (REQ-{UUID} 格式)
 - 完整的請求生命週期記錄
 - 狀態查詢和統計功能
+- 簡化的單一ID系統，提高追蹤效率
 
 ### 4. 監控和指標
 - Micrometer集成
@@ -307,18 +309,18 @@ sequenceDiagram
     Controller->>Controller: 驗證請求參數 (@Valid)
     
     Controller->>Orchestration: sendRequestWithTracking(request)
-    Orchestration->>Orchestration: generateCorrelationId()
+    Orchestration->>Orchestration: generateRequestId()
     Orchestration->>Orchestration: validateRequest(request)
     
-    Orchestration->>ClientService: sendRequest(subject, payload, correlationId)
-    ClientService->>Enhanced: sendRequest(subject, payload, correlationId)
+    Orchestration->>ClientService: sendRequest(subject, payload)
+    ClientService->>Enhanced: sendRequest(subject, payload)
     
-    Enhanced->>RequestProcessor: processMessage(subject, payload, correlationId)
+    Enhanced->>RequestProcessor: processMessage(subject, payload)
     
     Note over RequestProcessor: Template Method Pattern 開始
     RequestProcessor->>Validator: validateRequest(subject, payload)
     RequestProcessor->>PayloadProcessor: serialize(payload)
-    RequestProcessor->>LogService: createRequestLog(requestId, subject, payload, correlationId)
+    RequestProcessor->>LogService: createRequestLog(requestId, subject, payload)
     LogService->>Database: save(requestLog)
     
     RequestProcessor->>EventPublisher: publishEvent(MessageStartedEvent)
@@ -367,7 +369,7 @@ sequenceDiagram
     Orchestration->>ClientService: publishMessage(subject, payload)
     ClientService->>Enhanced: publishMessage(subject, payload)
     
-    Enhanced->>PublishProcessor: processMessage(subject, payload, null)
+    Enhanced->>PublishProcessor: processMessage(subject, payload)
     
     Note over PublishProcessor: Template Method Pattern
     PublishProcessor->>Validator: validateRequest(subject, payload)
@@ -408,8 +410,8 @@ sequenceDiagram
     
     Client->>Controller: POST /api/nats/request
     Controller->>Orchestration: sendRequestWithTracking(request)
-    Orchestration->>Enhanced: sendRequest(subject, payload, correlationId)
-    Enhanced->>Processor: processMessage(subject, payload, correlationId)
+    Orchestration->>Enhanced: sendRequest(subject, payload)
+    Enhanced->>Processor: processMessage(subject, payload)
     
     Processor->>JetStream: publish(subject, headers, payload, options)
     JetStream-->>Processor: Exception (連接錯誤)
@@ -469,7 +471,7 @@ sequenceDiagram
             
             RetryExecutor->>RetryExecutor: Thread.sleep(delayMs)
             
-            RetryExecutor->>Enhanced: sendRequest(subject, payload, correlationId)
+            RetryExecutor->>Enhanced: sendRequest(subject, payload)
             
             alt 重試成功
                 Enhanced-->>RetryExecutor: 成功響應

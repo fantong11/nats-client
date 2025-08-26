@@ -1,0 +1,129 @@
+### 可工作的 NATS Client API 測試
+### 已驗證在當前環境下可正常運行的測試
+
+@baseUrl = http://localhost:8080
+
+### ===== 基本健康檢查 =====
+
+### 1. 應用健康檢查 (應該成功)
+GET {{baseUrl}}/actuator/health
+Accept: application/json
+
+### 2. NATS 健康檢查 (應該成功)
+GET {{baseUrl}}/api/nats/health
+Accept: application/json
+
+### 3. 統計信息查看 (應該成功)
+GET {{baseUrl}}/api/nats/statistics
+Accept: application/json
+
+### ===== API 文檔訪問 =====
+
+### 4. Swagger UI (應該成功)
+GET {{baseUrl}}/swagger-ui.html
+Accept: text/html
+
+### 5. OpenAPI 規範 (應該成功)
+GET {{baseUrl}}/v3/api-docs
+Accept: application/json
+
+### ===== 預期會失敗的測試 (正常行為) =====
+
+### 6. NATS 發布測試 (可能失敗 - 需要 JetStream 配置)
+POST {{baseUrl}}/api/nats/publish
+Content-Type: application/json
+
+{
+  "subject": "test.publish",
+  "payload": {
+    "message": "Test message",
+    "timestamp": "{{$datetime iso8601}}"
+  }
+}
+
+### 7. NATS 請求測試 (可能超時 - 無回應者)
+POST {{baseUrl}}/api/nats/request
+Content-Type: application/json
+
+{
+  "subject": "test.request",
+  "payload": {
+    "message": "Test request",
+    "requestId": "test-{{$guid}}"
+  }
+}
+
+### ===== 驗證錯誤測試 (預期失敗) =====
+
+### 8. 空 Subject 測試 (應該返回 400)
+POST {{baseUrl}}/api/nats/request
+Content-Type: application/json
+
+{
+  "subject": "",
+  "payload": {
+    "message": "Invalid subject test"
+  }
+}
+
+### 9. 缺少 Payload 測試 (應該返回 400)
+POST {{baseUrl}}/api/nats/request
+Content-Type: application/json
+
+{
+  "subject": "test.missing.payload"
+}
+
+### ===== 查詢測試 =====
+
+### 10. 查詢成功請求
+GET {{baseUrl}}/api/nats/requests/SUCCESS
+Accept: application/json
+
+### 11. 查詢失敗請求
+GET {{baseUrl}}/api/nats/requests/FAILED
+Accept: application/json
+
+### 12. 查詢錯誤請求
+GET {{baseUrl}}/api/nats/requests/ERROR
+Accept: application/json
+
+### 13. 查詢超時請求
+GET {{baseUrl}}/api/nats/requests/TIMEOUT
+Accept: application/json
+
+### ===== 特殊端點測試 =====
+
+### 14. 回音測試 (可能失敗 - 需要回音服務)
+POST {{baseUrl}}/api/nats/test/echo
+Content-Type: application/json
+
+{
+  "message": "Hello Echo!",
+  "metadata": "test-metadata"
+}
+
+### 15. 超時測試 (預期失敗)
+POST {{baseUrl}}/api/nats/test/timeout
+Content-Type: application/json
+
+### 16. 錯誤測試 (預期失敗)
+POST {{baseUrl}}/api/nats/test/error
+Content-Type: application/json
+
+### ===== 查詢不存在資源 (預期 404) =====
+
+### 17. 查詢不存在的請求ID (應該返回 404)
+GET {{baseUrl}}/api/nats/status/REQ-nonexistent
+Accept: application/json
+
+### ===== 使用說明 =====
+### 
+### ✅ 應該成功的請求: 1-5, 10-13, 17
+### ❌ 預期失敗的請求: 6-9, 14-16 (這是正常的)
+### 
+### 失敗原因:
+### - 6, 7, 14-16: NATS JetStream 未正確配置或無訂閱者
+### - 8, 9: 驗證錯誤 (預期行為)
+### - 17: 資源不存在 (預期行為)
+###

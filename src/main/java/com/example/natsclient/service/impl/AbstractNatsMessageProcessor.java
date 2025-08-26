@@ -83,30 +83,30 @@ public abstract class AbstractNatsMessageProcessor<T> {
      * Template method defining the complete message processing workflow.
      * This method should not be overridden by subclasses.
      */
-    public final CompletableFuture<T> processMessage(String subject, Object payload, String correlationId) {
+    public final CompletableFuture<T> processMessage(String subject, Object payload) {
         // Step 1: Initialize request
         String requestId = initializeRequest();
         String eventId = UUID.randomUUID().toString();
         Instant startTime = Instant.now();
         
         // Step 2: Setup structured logging context
-        setupMDC(requestId, subject, correlationId, getOperationType());
+        setupMDC(requestId, subject, getOperationType());
         
         try {
             // Step 3: Validate input parameters
-            validateInput(subject, payload, correlationId);
+            validateInput(subject, payload);
             
             // Step 4: Increment request metrics
             requestCounter.increment();
             
             // Step 5: Publish start event
-            publishStartEvent(eventId, requestId, subject, payload, correlationId);
+            publishStartEvent(eventId, requestId, subject, payload);
             
             // Step 6: Log processing start
             logger.info("Starting {} processing", getOperationType());
             
             // Step 7: Execute specific processing logic and wrap with event publishing
-            return executeSpecificProcessing(requestId, subject, payload, correlationId, startTime)
+            return executeSpecificProcessing(requestId, subject, payload, startTime)
                     .whenComplete((result, throwable) -> {
                         Duration processingTime = Duration.between(startTime, Instant.now());
                         
@@ -141,21 +141,17 @@ public abstract class AbstractNatsMessageProcessor<T> {
     /**
      * Setup MDC context for structured logging.
      */
-    protected void setupMDC(String requestId, String subject, String correlationId, String operationType) {
+    protected void setupMDC(String requestId, String subject, String operationType) {
         MDC.put("requestId", requestId);
         MDC.put("subject", subject);
-        MDC.put("correlationId", correlationId);
         MDC.put("operation", operationType);
     }
     
     /**
      * Validate input parameters.
      */
-    protected void validateInput(String subject, Object payload, String correlationId) {
+    protected void validateInput(String subject, Object payload) {
         requestValidator.validateRequest(subject, payload);
-        if (requiresCorrelationIdValidation()) {
-            requestValidator.validateCorrelationId(correlationId);
-        }
     }
     
     /**
@@ -188,30 +184,26 @@ public abstract class AbstractNatsMessageProcessor<T> {
      * This is the main variation point in the template method.
      */
     protected abstract CompletableFuture<T> executeSpecificProcessing(
-            String requestId, String subject, Object payload, String correlationId, Instant startTime);
+            String requestId, String subject, Object payload, Instant startTime);
     
     /**
      * Get the operation type for logging and metrics.
      */
     protected abstract String getOperationType();
     
-    /**
-     * Determine if correlation ID validation is required for this operation type.
-     */
-    protected abstract boolean requiresCorrelationIdValidation();
     
     // Event publishing helper methods for Observer Pattern
     
     /**
      * Publishes a message started event.
      */
-    protected void publishStartEvent(String eventId, String requestId, String subject, Object payload, String correlationId) {
+    protected void publishStartEvent(String eventId, String requestId, String subject, Object payload) {
         try {
             Map<String, Object> metadata = new HashMap<>();
             metadata.put("timestamp", Instant.now());
             
             MessageStartedEvent event = new MessageStartedEvent(
-                    eventId, requestId, subject, getOperationType(), payload, correlationId, metadata);
+                    eventId, requestId, subject, getOperationType(), payload, metadata);
             
             eventPublisher.publishEvent(event);
         } catch (Exception e) {

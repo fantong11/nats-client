@@ -103,9 +103,7 @@ public class NatsResponseHandler {
             Map<String, Object> responseData = objectMapper.readValue(responsePayload, new TypeReference<Map<String, Object>>() {});
             
             String requestId = extractRequestId(responseData, message);
-            String correlationId = extractCorrelationId(responseData, message);
-            
-            Optional<NatsRequestLog> requestLogOpt = findRequestLog(requestId, correlationId);
+            Optional<NatsRequestLog> requestLogOpt = findRequestLog(requestId);
             
             if (requestLogOpt.isPresent()) {
                 NatsRequestLog requestLog = requestLogOpt.get();
@@ -120,14 +118,13 @@ public class NatsResponseHandler {
                     handleGenericResponse(requestLog, responsePayload);
                 }
                 
-                logger.info("Processed response for request ID: {}, correlation ID: {}, status: {}", 
-                           requestLog.getRequestId(), requestLog.getCorrelationId(), requestLog.getStatus());
+                logger.info("Processed response for request ID: {}, status: {}", 
+                           requestLog.getRequestId(), requestLog.getStatus());
                 
             } else {
-                logger.warn("No matching request found for response - RequestID: {}, CorrelationID: {}", 
-                           requestId, correlationId);
+                logger.warn("No matching request found for response - RequestID: {}", requestId);
                 
-                logUnmatchedResponse(subject, responsePayload, requestId, correlationId);
+                logUnmatchedResponse(subject, responsePayload, requestId);
             }
             
         } catch (Exception e) {
@@ -146,22 +143,10 @@ public class NatsResponseHandler {
         return requestId;
     }
 
-    private String extractCorrelationId(Map<String, Object> responseData, Message message) {
-        String correlationId = (String) responseData.get("correlationId");
-        if (correlationId == null) {
-            correlationId = (String) responseData.get("correlation_id");
-        }
-        if (correlationId == null && message.getHeaders() != null) {
-            correlationId = message.getHeaders().getFirst("Correlation-ID");
-        }
-        return correlationId;
-    }
 
-    private Optional<NatsRequestLog> findRequestLog(String requestId, String correlationId) {
+    private Optional<NatsRequestLog> findRequestLog(String requestId) {
         if (requestId != null) {
             return requestLogRepository.findByRequestId(requestId);
-        } else if (correlationId != null) {
-            return requestLogRepository.findByCorrelationId(correlationId);
         }
         return Optional.empty();
     }
@@ -208,12 +193,11 @@ public class NatsResponseHandler {
         );
     }
 
-    private void logUnmatchedResponse(String subject, String responsePayload, String requestId, String correlationId) {
+    private void logUnmatchedResponse(String subject, String responsePayload, String requestId) {
         NatsRequestLog unmatchedLog = new NatsRequestLog();
         unmatchedLog.setRequestId("UNMATCHED_" + System.currentTimeMillis());
         unmatchedLog.setSubject(subject);
         unmatchedLog.setResponsePayload(responsePayload);
-        unmatchedLog.setCorrelationId(correlationId);
         unmatchedLog.setStatus(NatsRequestLog.RequestStatus.ERROR);
         unmatchedLog.setErrorMessage("No matching request found for response");
         unmatchedLog.setCreatedBy("ASYNC_HANDLER");

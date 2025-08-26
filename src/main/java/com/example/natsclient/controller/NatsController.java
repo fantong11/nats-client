@@ -50,7 +50,7 @@ public class NatsController {
                             schema = @Schema(implementation = NatsRequestResponse.class),
                             examples = @ExampleObject(
                                     name = "成功響應",
-                                    value = "{\"correlationId\":\"CORR-12345\",\"subject\":\"user.profile\",\"success\":true,\"responsePayload\":{\"userId\":123,\"name\":\"John Doe\"},\"timestamp\":\"2024-01-01T10:00:00\"}"
+                                    value = "{\"requestId\":\"REQ-12345\",\"subject\":\"user.profile\",\"success\":true,\"responsePayload\":{\"userId\":123,\"name\":\"John Doe\"},\"timestamp\":\"2024-01-01T10:00:00\"}"
                             )
                     )
             ),
@@ -62,7 +62,7 @@ public class NatsController {
                             schema = @Schema(implementation = NatsRequestResponse.class),
                             examples = @ExampleObject(
                                     name = "錯誤響應",
-                                    value = "{\"correlationId\":\"CORR-12345\",\"subject\":\"user.profile\",\"success\":false,\"errorMessage\":\"Connection timeout\",\"timestamp\":\"2024-01-01T10:00:00\"}"
+                                    value = "{\"requestId\":\"REQ-12345\",\"subject\":\"user.profile\",\"success\":false,\"errorMessage\":\"Connection timeout\",\"timestamp\":\"2024-01-01T10:00:00\"}"
                             )
                     )
             )
@@ -171,7 +171,7 @@ public class NatsController {
     @Operation(
             summary = "查詢請求狀態",
             description = "根據請求ID查詢NATS請求的處理狀態和詳細信息。",
-            tags = {"Request Tracking"}
+            tags = {"NATS Operations"}
     )
     @ApiResponses(value = {
             @ApiResponse(
@@ -200,44 +200,12 @@ public class NatsController {
         return ResponseEntity.ok(status);
     }
 
-    @GetMapping("/status/correlation/{correlationId}")
-    @Operation(
-            summary = "通過相關ID查詢請求狀態",
-            description = "根據相關ID查詢NATS請求的處理狀態，用於追蹤特定的業務請求。",
-            tags = {"Request Tracking"}
-    )
-    @ApiResponses(value = {
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "狀態查詢成功",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = NatsRequestStatus.class)
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "相關ID不存在"
-            )
-    })
-    public ResponseEntity<NatsRequestStatus> getRequestStatusByCorrelationId(
-            @Parameter(
-                    description = "相關ID",
-                    required = true,
-                    example = "CORR-12345"
-            )
-            @PathVariable String correlationId) {
-        log.debug("Getting status for correlation ID: {}", correlationId);
-        
-        NatsRequestStatus status = orchestrationService.getRequestStatusByCorrelationId(correlationId);
-        return ResponseEntity.ok(status);
-    }
 
     @GetMapping("/requests/{status}")
     @Operation(
             summary = "根據狀態查詢請求列表",
             description = "查詢指定狀態的所有NATS請求列表，支持的狀態：PENDING, SUCCESS, FAILED, TIMEOUT, ERROR。",
-            tags = {"Request Tracking"}
+            tags = {"NATS Operations"}
     )
     @ApiResponses(value = {
             @ApiResponse(
@@ -276,7 +244,7 @@ public class NatsController {
     @Operation(
             summary = "獲取NATS統計信息",
             description = "獲取NATS服務的統計數據，包括總請求數、成功率、失敗數等指標。",
-            tags = {"Statistics"}
+            tags = {"NATS Operations"}
     )
     @ApiResponse(
             responseCode = "200",
@@ -301,7 +269,7 @@ public class NatsController {
     @Operation(
             summary = "測試回音功能",
             description = "測試NATS連接和消息處理功能，發送測試消息並接收回音響應。",
-            tags = {"Testing"}
+            tags = {"NATS Operations"}
     )
     @ApiResponse(
             responseCode = "200",
@@ -337,7 +305,7 @@ public class NatsController {
     @Operation(
             summary = "測試超時處理",
             description = "測試NATS服務的超時處理機制，用於驗證系統的錯誤處理能力。",
-            tags = {"Testing"}
+            tags = {"NATS Operations"}
     )
     @ApiResponse(
             responseCode = "200",
@@ -362,7 +330,7 @@ public class NatsController {
     @Operation(
             summary = "測試錯誤處理",
             description = "測試NATS服務的錯誤處理機制，用於驗證系統的異常處理能力。",
-            tags = {"Testing"}
+            tags = {"NATS Operations"}
     )
     @ApiResponse(
             responseCode = "200",
@@ -387,7 +355,7 @@ public class NatsController {
     @Operation(
             summary = "健康檢查",
             description = "檢查NATS服務的健康狀態，包括連接狀態、統計信息等。",
-            tags = {"Health Check"}
+            tags = {"NATS Operations"}
     )
     @ApiResponse(
             responseCode = "200",

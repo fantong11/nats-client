@@ -23,7 +23,6 @@ public final class NatsMessageHeaders {
     
     // Standard NATS headers
     public static final String NATS_MSG_ID = "Nats-Msg-Id";
-    public static final String NATS_CORRELATION_ID = "Nats-Correlation-Id";
     public static final String NATS_REPLY_TO = "Nats-Reply-To";
     public static final String NATS_TIMESTAMP = "Nats-Timestamp";
     public static final String NATS_SOURCE = "Nats-Source";
@@ -116,19 +115,13 @@ public final class NatsMessageHeaders {
     }
     
     /**
-     * Creates Headers object with message ID and correlation ID.
+     * Creates Headers object with message ID.
      * 
      * @param messageId The message ID to set
-     * @param correlationId The correlation ID to set
-     * @return Headers object with both IDs
+     * @return Headers object with message ID
      */
-    public static Headers createHeadersWithIds(String messageId, String correlationId) {
-        Headers headers = createHeadersWithMessageId(messageId);
-        if (correlationId != null && !correlationId.trim().isEmpty()) {
-            headers.add(NATS_CORRELATION_ID, correlationId);
-            logger.debug("Added correlation ID to headers: '{}'", correlationId);
-        }
-        return headers;
+    public static Headers createHeadersWithIds(String messageId) {
+        return createHeadersWithMessageId(messageId);
     }
     
     /**
@@ -144,28 +137,6 @@ public final class NatsMessageHeaders {
         }
     }
     
-    /**
-     * Extracts the correlation ID from NATS message headers.
-     * 
-     * @param message The NATS message
-     * @return Optional containing the correlation ID if present
-     */
-    public static Optional<String> getCorrelationId(Message message) {
-        if (message == null || !message.hasHeaders()) {
-            return Optional.empty();
-        }
-        
-        try {
-            List<String> correlationIds = message.getHeaders().get(NATS_CORRELATION_ID);
-            if (correlationIds != null && !correlationIds.isEmpty()) {
-                return Optional.of(correlationIds.get(0));
-            }
-        } catch (Exception e) {
-            logger.warn("Error extracting correlation ID from headers: {}", e.getMessage());
-        }
-        
-        return Optional.empty();
-    }
     
     /**
      * Extracts a custom header value from NATS message headers.
@@ -224,19 +195,14 @@ public final class NatsMessageHeaders {
      * Creates comprehensive headers for outgoing messages with all standard fields.
      * 
      * @param messageId The message ID
-     * @param correlationId The correlation ID (optional)
      * @param sourceService The source service name (optional)
      * @return Headers object with all specified fields
      */
-    public static Headers createComprehensiveHeaders(String messageId, String correlationId, String sourceService) {
+    public static Headers createComprehensiveHeaders(String messageId, String sourceService) {
         Headers headers = new Headers();
         
         if (messageId != null && !messageId.trim().isEmpty()) {
             headers.add(NATS_MSG_ID, messageId);
-        }
-        
-        if (correlationId != null && !correlationId.trim().isEmpty()) {
-            headers.add(NATS_CORRELATION_ID, correlationId);
         }
         
         if (sourceService != null && !sourceService.trim().isEmpty()) {
@@ -246,8 +212,8 @@ public final class NatsMessageHeaders {
         // Add timestamp
         headers.add(NATS_TIMESTAMP, String.valueOf(System.currentTimeMillis()));
         
-        logger.debug("Created comprehensive headers with messageId='{}', correlationId='{}', sourceService='{}'", 
-                    messageId, correlationId, sourceService);
+        logger.debug("Created comprehensive headers with messageId='{}', sourceService='{}'", 
+                    messageId, sourceService);
         
         return headers;
     }

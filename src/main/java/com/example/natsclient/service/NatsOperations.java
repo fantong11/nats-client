@@ -9,10 +9,9 @@ import java.util.concurrent.CompletableFuture;
  * Interface for NATS operations abstraction.
  * 
  * This interface follows the Dependency Inversion Principle by abstracting
- * the concrete NATS implementations (Connection and JetStream).
+ * the concrete NATS implementations using JetStream.
  * 
- * It also supports the Open/Closed Principle by allowing different implementations
- * for different messaging patterns (Core NATS, JetStream, etc.).
+ * All NATS communication in this application uses JetStream for durability and reliability.
  */
 public interface NatsOperations {
     
