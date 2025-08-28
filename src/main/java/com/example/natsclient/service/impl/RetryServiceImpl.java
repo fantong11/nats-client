@@ -48,16 +48,9 @@ public class RetryServiceImpl {
     }
     
     private void retryRequest(NatsRequestLog failedRequest) {
-        try {
-            logger.info("Retrying request ID: {}", failedRequest.getRequestId());
-            
-            natsMessageService.sendRequest(
-                failedRequest.getSubject(), 
-                failedRequest.getRequestPayload()
-            );
-            
-        } catch (Exception e) {
-            logger.error("Retry failed for request ID: {}", failedRequest.getRequestId(), e);
-        }
+        // Note: Request-reply functionality has been removed
+        // This method is kept for potential future publish retry functionality
+        logger.info("Retry functionality disabled - request-reply removed from system");
+        logger.info("Request ID: {} will not be retried", failedRequest.getRequestId());
     }
 }

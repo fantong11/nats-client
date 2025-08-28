@@ -2,9 +2,11 @@ package com.example.natsclient.service.impl;
 
 import com.example.natsclient.config.NatsProperties;
 import com.example.natsclient.exception.NatsRequestException;
+import com.example.natsclient.model.PublishResult;
 import com.example.natsclient.service.NatsMessageService;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.natsclient.util.NatsMessageUtils;
 import com.example.natsclient.service.factory.MetricsFactory;
 import com.example.natsclient.service.observer.NatsEventPublisher;
@@ -39,7 +41,6 @@ public class EnhancedNatsMessageService implements NatsMessageService {
     
     private static final Logger logger = LoggerFactory.getLogger(EnhancedNatsMessageService.class);
     
-    private final NatsRequestProcessor requestProcessor;
     private final NatsPublishProcessor publishProcessor;
     
     @Autowired
@@ -53,36 +54,19 @@ public class EnhancedNatsMessageService implements NatsMessageService {
             MeterRegistry meterRegistry,
             MetricsFactory metricsFactory,
             NatsMessageUtils messageUtils,
-            NatsEventPublisher eventPublisher) {
+            NatsEventPublisher eventPublisher,
+            ObjectMapper objectMapper) {
         
-        // Initialize specialized processors using Template Method, Factory, Builder, and Observer patterns
-        this.requestProcessor = new NatsRequestProcessor(
-                jetStream, requestLogService, payloadProcessor, 
-                requestValidator, natsProperties, meterRegistry, metricsFactory, messageUtils, eventPublisher);
-        
+        // Initialize publish processor using Template Method, Factory, Builder, and Observer patterns
         this.publishProcessor = new NatsPublishProcessor(
                 jetStream, requestLogService, payloadProcessor,
-                requestValidator, natsProperties, meterRegistry, metricsFactory, messageUtils, eventPublisher);
+                requestValidator, natsProperties, meterRegistry, metricsFactory, messageUtils, eventPublisher, objectMapper);
     }
     
-    
     @Override
-    @Async
-    @Retryable(
-        value = {NatsRequestException.class},
-        maxAttempts = 3,
-        backoff = @Backoff(delay = 1000, multiplier = 2)
-    )
-    public CompletableFuture<String> sendRequest(String subject, Object requestPayload) {
-        logger.info("Delegating request processing to specialized processor - Subject: {}", subject);
-        return requestProcessor.processMessage(subject, requestPayload);
-    }
-    
-    
-    @Override
-    @Async
-    public CompletableFuture<Void> publishMessage(String subject, Object messagePayload) {
-        logger.info("Delegating publish processing to specialized processor - Subject: {}", subject);
-        return publishProcessor.processMessage(subject, messagePayload);
+    @Async  
+    public CompletableFuture<PublishResult> publishMessage(String requestId, String subject, Object messagePayload) {
+        logger.info("Delegating publish processing to specialized processor - RequestID: {}, Subject: {}", requestId, subject);
+        return publishProcessor.processMessage(requestId, subject, messagePayload);
     }
 }

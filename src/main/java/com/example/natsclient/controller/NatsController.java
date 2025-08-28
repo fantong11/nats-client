@@ -2,6 +2,7 @@ package com.example.natsclient.controller;
 
 import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.service.NatsOrchestrationService;
+import com.example.natsclient.service.NatsListenerService;
 import com.example.natsclient.service.NatsOrchestrationService.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -34,66 +35,10 @@ public class NatsController {
 
     @Autowired
     private NatsOrchestrationService orchestrationService;
+    
+    @Autowired
+    private NatsListenerService natsListenerService;
 
-    @PostMapping("/request")
-    @Operation(
-            summary = "發送NATS請求",
-            description = "發送請求到NATS服務器並等待響應。支持異步處理和完整的請求追蹤。",
-            tags = {"NATS Operations"}
-    )
-    @ApiResponses(value = {
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "請求處理成功",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = NatsRequestResponse.class),
-                            examples = @ExampleObject(
-                                    name = "成功響應",
-                                    value = "{\"requestId\":\"REQ-12345\",\"subject\":\"user.profile\",\"success\":true,\"responsePayload\":{\"userId\":123,\"name\":\"John Doe\"},\"timestamp\":\"2024-01-01T10:00:00\"}"
-                            )
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "請求處理失敗",
-                    content = @Content(
-                            mediaType = "application/json",
-                            schema = @Schema(implementation = NatsRequestResponse.class),
-                            examples = @ExampleObject(
-                                    name = "錯誤響應",
-                                    value = "{\"requestId\":\"REQ-12345\",\"subject\":\"user.profile\",\"success\":false,\"errorMessage\":\"Connection timeout\",\"timestamp\":\"2024-01-01T10:00:00\"}"
-                            )
-                    )
-            )
-    })
-    public CompletableFuture<ResponseEntity<NatsRequestResponse>> sendRequest(
-            @Parameter(
-                    description = "NATS請求參數",
-                    required = true,
-                    content = @Content(
-                            examples = @ExampleObject(
-                                    name = "用戶資料請求",
-                                    value = "{\"subject\":\"user.profile\",\"payload\":{\"userId\":123}}"
-                            )
-                    )
-            )
-            @Valid @RequestBody NatsRequestDto requestDto) {
-        log.info("Received NATS request - Subject: {}", requestDto.getSubject());
-        
-        NatsRequest request = new NatsRequest();
-        request.setSubject(requestDto.getSubject());
-        request.setPayload(requestDto.getPayload());
-        
-        return orchestrationService.sendRequestWithTracking(request)
-                .thenApply(response -> {
-                    if (response.isSuccess()) {
-                        return ResponseEntity.ok(response);
-                    } else {
-                        return ResponseEntity.status(500).body(response);
-                    }
-                });
-    }
 
     @PostMapping("/publish")
     @Operation(
@@ -144,6 +89,8 @@ public class NatsController {
         NatsPublishRequest request = new NatsPublishRequest();
         request.setSubject(publishDto.getSubject());
         request.setPayload(publishDto.getPayload());
+        request.setResponseSubject(publishDto.getResponseSubject());
+        request.setResponseIdField(publishDto.getResponseIdField());
         
         return orchestrationService.publishMessageWithTracking(request)
                 .thenApply(result -> {
@@ -265,91 +212,6 @@ public class NatsController {
         return ResponseEntity.ok(statistics);
     }
 
-    @PostMapping("/test/echo")
-    @Operation(
-            summary = "測試回音功能",
-            description = "測試NATS連接和消息處理功能，發送測試消息並接收回音響應。",
-            tags = {"NATS Operations"}
-    )
-    @ApiResponse(
-            responseCode = "200",
-            description = "回音測試成功",
-            content = @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = NatsRequestResponse.class)
-            )
-    )
-    public CompletableFuture<ResponseEntity<NatsRequestResponse>> testEcho(
-            @Parameter(
-                    description = "回音測試參數",
-                    required = true,
-                    content = @Content(
-                            examples = @ExampleObject(
-                                    name = "回音測試",
-                                    value = "{\"message\":\"Hello NATS\",\"metadata\":\"test-data\"}"
-                            )
-                    )
-            )
-            @Valid @RequestBody TestEchoDto echoDto) {
-        log.info("Test echo request - Message: {}", echoDto.getMessage());
-        
-        NatsRequest request = new NatsRequest();
-        request.setSubject("test.echo");
-        request.setPayload(echoDto);
-        
-        return orchestrationService.sendRequestWithTracking(request)
-                .thenApply(response -> ResponseEntity.ok(response));
-    }
-
-    @PostMapping("/test/timeout")
-    @Operation(
-            summary = "測試超時處理",
-            description = "測試NATS服務的超時處理機制，用於驗證系統的錯誤處理能力。",
-            tags = {"NATS Operations"}
-    )
-    @ApiResponse(
-            responseCode = "200",
-            description = "超時測試執行完成",
-            content = @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = NatsRequestResponse.class)
-            )
-    )
-    public CompletableFuture<ResponseEntity<NatsRequestResponse>> testTimeout() {
-        log.info("Test timeout request");
-        
-        NatsRequest request = new NatsRequest();
-        request.setSubject("test.timeout");
-        request.setPayload(new TestPayload("timeout test"));
-        
-        return orchestrationService.sendRequestWithTracking(request)
-                .thenApply(response -> ResponseEntity.ok(response));
-    }
-
-    @PostMapping("/test/error")
-    @Operation(
-            summary = "測試錯誤處理",
-            description = "測試NATS服務的錯誤處理機制，用於驗證系統的異常處理能力。",
-            tags = {"NATS Operations"}
-    )
-    @ApiResponse(
-            responseCode = "200",
-            description = "錯誤測試執行完成",
-            content = @Content(
-                    mediaType = "application/json",
-                    schema = @Schema(implementation = NatsRequestResponse.class)
-            )
-    )
-    public CompletableFuture<ResponseEntity<NatsRequestResponse>> testError() {
-        log.info("Test error request");
-        
-        NatsRequest request = new NatsRequest();
-        request.setSubject("test.error");
-        request.setPayload(new TestPayload("error test"));
-        
-        return orchestrationService.sendRequestWithTracking(request)
-                .thenApply(response -> ResponseEntity.ok(response));
-    }
 
     @GetMapping("/health")
     @Operation(
@@ -406,7 +268,7 @@ public class NatsController {
     public static class NatsPublishDto {
         @Schema(
                 description = "NATS主題名稱",
-                example = "events.user.created",
+                example = "requests.user.create",
                 required = true
         )
         @NotBlank(message = "Subject is required")
@@ -419,6 +281,19 @@ public class NatsController {
         )
         @NotNull(message = "Payload is required")
         private Object payload;
+        
+        @Schema(
+                description = "期望回應的主題名稱（可選）",
+                example = "responses.user.create"
+        )
+        private String responseSubject;
+        
+        @Schema(
+                description = "回應消息中用於關聯的ID字段名稱（固定為 'correlationId'，系統會自動注入）",
+                example = "correlationId",
+                defaultValue = "correlationId"
+        )
+        private String responseIdField = "correlationId";
     }
     
     @Data
@@ -484,5 +359,197 @@ public class NatsController {
         
         @Schema(description = "成功率百分比", example = "95.5")
         private double successRate;
+    }
+
+    // ================== LISTENER ENDPOINTS ==================
+    
+    @PostMapping("/listeners/start")
+    @Operation(
+            summary = "開始監聽NATS主題",
+            description = "開始監聽指定的NATS主題，並從JSON消息中提取指定的ID字段。",
+            tags = {"NATS Listeners"}
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "監聽器啟動成功",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = ListenerStartResponse.class),
+                            examples = @ExampleObject(
+                                    name = "監聽器啟動成功",
+                                    value = "{\"listenerId\":\"listener-123\",\"subject\":\"orders.created\",\"idField\":\"orderId\",\"status\":\"STARTED\",\"message\":\"Listener started successfully\"}"
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "監聽器啟動失敗"
+            )
+    })
+    public CompletableFuture<ResponseEntity<ListenerStartResponse>> startListener(
+            @Parameter(
+                    description = "監聽器啟動參數",
+                    required = true,
+                    content = @Content(
+                            examples = @ExampleObject(
+                                    name = "訂單監聽器",
+                                    value = "{\"subject\":\"orders.created\",\"idField\":\"orderId\"}"
+                            )
+                    )
+            )
+            @Valid @RequestBody ListenerStartRequest request) {
+        log.info("Starting listener for subject '{}' with ID field '{}'", request.getSubject(), request.getIdField());
+        
+        // Directly use NatsListenerService following SOLID principles
+        return natsListenerService.startListener(request.getSubject(), request.getIdField(), null)
+                .thenApply(listenerId -> {
+                    ListenerStartResponse response = new ListenerStartResponse();
+                    response.setListenerId(listenerId);
+                    response.setSubject(request.getSubject());
+                    response.setIdField(request.getIdField());
+                    response.setStatus("STARTED");
+                    response.setMessage("Listener started successfully");
+                    response.setTimestamp(java.time.Instant.now().toString());
+                    return ResponseEntity.ok(response);
+                })
+                .exceptionally(throwable -> {
+                    log.error("Failed to start listener", throwable);
+                    ListenerStartResponse response = new ListenerStartResponse();
+                    response.setSubject(request.getSubject());
+                    response.setIdField(request.getIdField());
+                    response.setStatus("FAILED");
+                    response.setMessage("Failed to start listener: " + throwable.getMessage());
+                    response.setTimestamp(java.time.Instant.now().toString());
+                    return ResponseEntity.status(500).body(response);
+                });
+    }
+
+    @PostMapping("/listeners/{listenerId}/stop")
+    @Operation(
+            summary = "停止監聽器",
+            description = "停止指定的NATS主題監聽器。",
+            tags = {"NATS Listeners"}
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "監聽器停止成功"
+    )
+    public CompletableFuture<ResponseEntity<String>> stopListener(
+            @Parameter(description = "監聽器ID", required = true)
+            @PathVariable String listenerId) {
+        log.info("Stopping listener: {}", listenerId);
+        
+        return natsListenerService.stopListener(listenerId)
+                .thenApply(result -> ResponseEntity.ok("Listener stopped successfully"))
+                .exceptionally(throwable -> {
+                    log.error("Failed to stop listener", throwable);
+                    return ResponseEntity.status(500).body("Failed to stop listener: " + throwable.getMessage());
+                });
+    }
+
+    @GetMapping("/listeners/status")
+    @Operation(
+            summary = "查詢所有監聽器狀態",
+            description = "查詢當前所有活躍監聽器的狀態信息。",
+            tags = {"NATS Listeners"}
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "監聽器狀態查詢成功",
+            content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(type = "array", implementation = ListenerStatusResponse.class)
+            )
+    )
+    public CompletableFuture<ResponseEntity<List<ListenerStatusResponse>>> getListenerStatus() {
+        log.debug("Getting listener status");
+        
+        return natsListenerService.getListenerStatus()
+                .thenApply(statuses -> {
+                    List<ListenerStatusResponse> responses = statuses.stream()
+                            .map(status -> {
+                                ListenerStatusResponse response = new ListenerStatusResponse();
+                                response.setListenerId(status.listenerId());
+                                response.setSubject(status.subject());
+                                response.setIdField(status.idFieldName());
+                                response.setStatus(status.status());
+                                response.setMessagesReceived(status.messagesReceived());
+                                response.setStartTime(status.startTime().toString());
+                                response.setLastMessageTime(status.lastMessageTime() != null ? status.lastMessageTime().toString() : null);
+                                return response;
+                            })
+                            .toList();
+                    return ResponseEntity.ok(responses);
+                });
+    }
+
+    // ================== LISTENER DTOs ==================
+    
+    @Data
+    @Schema(description = "監聽器啟動請求參數")
+    public static class ListenerStartRequest {
+        @Schema(
+                description = "要監聽的NATS主題",
+                example = "orders.created",
+                required = true
+        )
+        @NotBlank(message = "Subject is required")
+        private String subject;
+        
+        @Schema(
+                description = "要從JSON消息中提取的ID字段名（支持點號分隔的嵌套字段）",
+                example = "orderId",
+                required = true
+        )
+        @NotBlank(message = "ID field is required")
+        private String idField;
+    }
+    
+    @Data
+    @Schema(description = "監聽器啟動響應")
+    public static class ListenerStartResponse {
+        @Schema(description = "監聽器ID", example = "listener-123")
+        private String listenerId;
+        
+        @Schema(description = "監聽的主題", example = "orders.created")
+        private String subject;
+        
+        @Schema(description = "ID字段名", example = "orderId")
+        private String idField;
+        
+        @Schema(description = "狀態", example = "STARTED")
+        private String status;
+        
+        @Schema(description = "響應消息", example = "Listener started successfully")
+        private String message;
+        
+        @Schema(description = "時間戳", example = "2024-01-01T10:00:00Z")
+        private String timestamp;
+    }
+    
+    @Data
+    @Schema(description = "監聽器狀態響應")
+    public static class ListenerStatusResponse {
+        @Schema(description = "監聽器ID", example = "listener-123")
+        private String listenerId;
+        
+        @Schema(description = "監聽的主題", example = "orders.created")
+        private String subject;
+        
+        @Schema(description = "ID字段名", example = "orderId")
+        private String idField;
+        
+        @Schema(description = "狀態", example = "ACTIVE")
+        private String status;
+        
+        @Schema(description = "接收的消息數量", example = "42")
+        private long messagesReceived;
+        
+        @Schema(description = "啟動時間", example = "2024-01-01T10:00:00Z")
+        private String startTime;
+        
+        @Schema(description = "最後接收消息時間", example = "2024-01-01T10:05:00Z")
+        private String lastMessageTime;
     }
 }

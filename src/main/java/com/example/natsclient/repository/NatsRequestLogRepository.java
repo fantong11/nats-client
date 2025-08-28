@@ -53,4 +53,7 @@ public interface NatsRequestLogRepository extends JpaRepository<NatsRequestLog, 
             @Param("subject") String subject,
             @Param("status") NatsRequestLog.RequestStatus status
     );
+    
+    @Query("SELECT n FROM NatsRequestLog n WHERE n.requestPayload LIKE %:correlationId% AND n.status IN ('PENDING', 'PROCESSING')")
+    List<NatsRequestLog> findByCorrelationIdInPayload(@Param("correlationId") String correlationId);
 }

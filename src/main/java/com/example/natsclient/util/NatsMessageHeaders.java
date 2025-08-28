@@ -28,7 +28,7 @@ public final class NatsMessageHeaders {
     public static final String NATS_SOURCE = "Nats-Source";
     public static final String NATS_VERSION = "Nats-Version";
     
-    // Custom headers for enhanced functionality
+    // Custom headers for additional functionality
     public static final String CUSTOM_RETRY_COUNT = "X-Retry-Count";
     public static final String CUSTOM_PROCESSING_TIMEOUT = "X-Processing-Timeout";
     public static final String CUSTOM_DEDUP_TTL = "X-Dedup-TTL";

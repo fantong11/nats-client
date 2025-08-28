@@ -1,5 +1,6 @@
 package com.example.natsclient.service;
 
+import com.example.natsclient.model.PublishResult;
 import com.example.natsclient.service.impl.RetryServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,13 +23,9 @@ public class NatsClientService {
         this.natsMessageService = natsMessageService;
         this.retryService = retryService;
     }
-
-    public CompletableFuture<String> sendRequest(String subject, Object requestPayload) {
-        return natsMessageService.sendRequest(subject, requestPayload);
-    }
-
-    public CompletableFuture<Void> publishMessage(String subject, Object messagePayload) {
-        return natsMessageService.publishMessage(subject, messagePayload);
+    
+    public CompletableFuture<PublishResult> publishMessage(String requestId, String subject, Object messagePayload) {
+        return natsMessageService.publishMessage(requestId, subject, messagePayload);
     }
 
     public void retryFailedRequests() {

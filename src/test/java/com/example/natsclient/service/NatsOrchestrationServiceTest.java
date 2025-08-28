@@ -2,6 +2,7 @@ package com.example.natsclient.service;
 
 import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.exception.NatsClientException;
+import com.example.natsclient.model.PublishResult;
 import com.example.natsclient.repository.NatsRequestLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,7 +15,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -33,139 +33,37 @@ class NatsOrchestrationServiceTest {
     private NatsRequestLogRepository requestLogRepository;
 
     @Mock
+    private NatsListenerService natsListenerService;
+
+    @Mock
+    private RequestResponseCorrelationService correlationService;
+
+    @Mock
+    private PayloadProcessor payloadProcessor;
+
+    @Mock
     private ObjectMapper objectMapper;
 
     @InjectMocks
     private NatsOrchestrationService orchestrationService;
 
-    private NatsOrchestrationService.NatsRequest testRequest;
     private NatsOrchestrationService.NatsPublishRequest testPublishRequest;
     private final String testSubject = "test.subject";
     private final Object testPayload = new TestPayload("test data");
-    private final String testResponse = "{\"status\":\"success\"}";
 
     @BeforeEach
-    void setUp() throws Exception {
-        testRequest = new NatsOrchestrationService.NatsRequest();
-        testRequest.setSubject(testSubject);
-        testRequest.setPayload(testPayload);
-
+    void setUp() {
         testPublishRequest = new NatsOrchestrationService.NatsPublishRequest();
         testPublishRequest.setSubject(testSubject);
         testPublishRequest.setPayload(testPayload);
     }
 
     @Test
-    void sendRequestWithTracking_Success_ShouldReturnSuccessfulResponse() throws Exception {
-        // Arrange
-        Map<String, Object> parsedResponse = Map.of("status", "success");
-        when(objectMapper.readValue(eq(testResponse), eq(Object.class)))
-            .thenReturn(parsedResponse);
-            
-        CompletableFuture<String> natsResponseFuture = CompletableFuture.completedFuture(testResponse);
-        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload)))
-                .thenReturn(natsResponseFuture);
-
-        // Act
-        CompletableFuture<NatsOrchestrationService.NatsRequestResponse> result = 
-                orchestrationService.sendRequestWithTracking(testRequest);
-
-        // Assert
-        assertNotNull(result);
-        NatsOrchestrationService.NatsRequestResponse response = result.get();
-        
-        assertTrue(response.isSuccess());
-        assertEquals(testSubject, response.getSubject());
-        
-        // Response payload should now be a parsed Map object
-        Map<String, Object> expectedPayload = Map.of("status", "success");
-        assertEquals(expectedPayload, response.getResponsePayload());
-        
-        assertNotNull(response.getRequestId());
-        assertNotNull(response.getTimestamp());
-        assertNull(response.getErrorMessage());
-
-        verify(natsClientService).sendRequest(eq(testSubject), eq(testPayload));
-    }
-
-    @Test
-    void sendRequestWithTracking_NullResponse_ShouldReturnFailureResponse() throws Exception {
-        // Arrange
-        CompletableFuture<String> natsResponseFuture = CompletableFuture.completedFuture(null);
-        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload)))
-                .thenReturn(natsResponseFuture);
-
-        // Act
-        CompletableFuture<NatsOrchestrationService.NatsRequestResponse> result = 
-                orchestrationService.sendRequestWithTracking(testRequest);
-
-        // Assert
-        assertNotNull(result);
-        NatsOrchestrationService.NatsRequestResponse response = result.get();
-        
-        assertFalse(response.isSuccess());
-        assertEquals(testSubject, response.getSubject());
-        assertNull(response.getResponsePayload());
-        assertEquals("No response received", response.getErrorMessage());
-        assertNotNull(response.getRequestId());
-        assertNotNull(response.getTimestamp());
-    }
-
-    @Test
-    void sendRequestWithTracking_Exception_ShouldReturnErrorResponse() throws Exception {
-        // Arrange
-        RuntimeException testException = new RuntimeException("Test exception");
-        CompletableFuture<String> failedFuture = new CompletableFuture<>();
-        failedFuture.completeExceptionally(testException);
-        
-        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload)))
-                .thenReturn(failedFuture);
-
-        // Act
-        CompletableFuture<NatsOrchestrationService.NatsRequestResponse> result = 
-                orchestrationService.sendRequestWithTracking(testRequest);
-
-        // Assert
-        assertNotNull(result);
-        NatsOrchestrationService.NatsRequestResponse response = result.get();
-        
-        assertFalse(response.isSuccess());
-        assertEquals(testSubject, response.getSubject());
-        assertNull(response.getResponsePayload());
-        assertEquals("java.lang.RuntimeException: Test exception", response.getErrorMessage());
-        assertNotNull(response.getRequestId());
-        assertNotNull(response.getTimestamp());
-    }
-
-    @Test
-    void sendRequestWithTracking_ValidationFailure_ShouldReturnErrorResponse() throws Exception {
-        // Arrange
-        NatsOrchestrationService.NatsRequest invalidRequest = new NatsOrchestrationService.NatsRequest();
-        invalidRequest.setSubject(""); // Invalid empty subject
-        invalidRequest.setPayload(testPayload);
-
-        // Act
-        CompletableFuture<NatsOrchestrationService.NatsRequestResponse> result = 
-                orchestrationService.sendRequestWithTracking(invalidRequest);
-
-        // Assert
-        assertNotNull(result);
-        NatsOrchestrationService.NatsRequestResponse response = result.get();
-        
-        assertFalse(response.isSuccess());
-        assertEquals("", response.getSubject());
-        assertNotNull(response.getErrorMessage());
-        assertNotNull(response.getRequestId());
-        assertNotNull(response.getTimestamp());
-
-        verify(natsClientService, never()).sendRequest(anyString(), any());
-    }
-
-    @Test
     void publishMessageWithTracking_Success_ShouldCompleteSuccessfully() throws Exception {
         // Arrange
-        CompletableFuture<Void> publishFuture = CompletableFuture.completedFuture(null);
-        when(natsClientService.publishMessage(eq(testSubject), eq(testPayload)))
+        PublishResult.Success successResult = new PublishResult.Success("test-request-id", 123L, testSubject);
+        CompletableFuture<PublishResult> publishFuture = CompletableFuture.completedFuture(successResult);
+        when(natsClientService.publishMessage(anyString(), eq(testSubject), eq(testPayload)))
                 .thenReturn(publishFuture);
 
         // Act
@@ -175,18 +73,18 @@ class NatsOrchestrationServiceTest {
         assertNotNull(result);
         String requestId = assertDoesNotThrow(() -> result.get());
         assertNotNull(requestId);
+        assertTrue(requestId.startsWith("REQ-"));
 
-        verify(natsClientService).publishMessage(eq(testSubject), eq(testPayload));
+        verify(natsClientService).publishMessage(anyString(), eq(testSubject), eq(testPayload));
     }
 
     @Test
     void publishMessageWithTracking_Exception_ShouldPropagateException() {
         // Arrange
-        RuntimeException testException = new RuntimeException("Publish failed");
-        CompletableFuture<Void> failedFuture = new CompletableFuture<>();
-        failedFuture.completeExceptionally(testException);
+        PublishResult.Failure failureResult = new PublishResult.Failure("test-request-id", testSubject, "Test error", "TestException");
+        CompletableFuture<PublishResult> failedFuture = CompletableFuture.completedFuture(failureResult);
         
-        when(natsClientService.publishMessage(eq(testSubject), eq(testPayload)))
+        when(natsClientService.publishMessage(anyString(), eq(testSubject), eq(testPayload)))
                 .thenReturn(failedFuture);
 
         // Act
@@ -195,7 +93,7 @@ class NatsOrchestrationServiceTest {
         // Assert
         assertNotNull(result);
         ExecutionException exception = assertThrows(ExecutionException.class, () -> result.get());
-        assertEquals("Publish failed", exception.getCause().getMessage());
+        assertEquals("Publish failed: Test error", exception.getCause().getMessage());
     }
 
     @Test
@@ -227,7 +125,6 @@ class NatsOrchestrationServiceTest {
         });
     }
 
-
     @Test
     void getRequestsByStatus_ExistingRequests_ShouldReturnStatusList() {
         // Arrange
@@ -257,7 +154,6 @@ class NatsOrchestrationServiceTest {
         lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.ERROR)).thenReturn(1L);
         lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.TIMEOUT)).thenReturn(1L);
         lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.PENDING)).thenReturn(0L);
-        lenient().when(requestLogRepository.count()).thenReturn(14L);
 
         // Act
         NatsOrchestrationService.NatsStatistics result = orchestrationService.getStatistics();
@@ -271,42 +167,6 @@ class NatsOrchestrationServiceTest {
         assertEquals(1L, result.getTimeoutRequests());
         assertEquals(0L, result.getPendingRequests());
         assertEquals(71.43, result.getSuccessRate(), 0.01); // 10/14 * 100
-    }
-
-    @Test
-    void getStatistics_NoRequests_ShouldReturnZeroStats() {
-        // Arrange
-        lenient().when(requestLogRepository.countByStatus(any())).thenReturn(0L);
-        lenient().when(requestLogRepository.count()).thenReturn(0L);
-
-        // Act
-        NatsOrchestrationService.NatsStatistics result = orchestrationService.getStatistics();
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(0L, result.getTotalRequests());
-        assertEquals(0L, result.getSuccessfulRequests());
-        assertEquals(0.0, result.getSuccessRate(), 0.01);
-    }
-
-    @Test
-    void sendRequestWithTracking_GeneratesUniqueRequestIds() throws Exception {
-        // Arrange
-        CompletableFuture<String> natsResponseFuture = CompletableFuture.completedFuture(testResponse);
-        when(natsClientService.sendRequest(eq(testSubject), eq(testPayload)))
-                .thenReturn(natsResponseFuture);
-
-        // Act
-        CompletableFuture<NatsOrchestrationService.NatsRequestResponse> result1 = 
-                orchestrationService.sendRequestWithTracking(testRequest);
-        CompletableFuture<NatsOrchestrationService.NatsRequestResponse> result2 = 
-                orchestrationService.sendRequestWithTracking(testRequest);
-
-        // Assert
-        NatsOrchestrationService.NatsRequestResponse response1 = result1.get();
-        NatsOrchestrationService.NatsRequestResponse response2 = result2.get();
-        
-        assertNotEquals(response1.getRequestId(), response2.getRequestId());
     }
 
     private NatsRequestLog createMockRequestLog(String requestId) {

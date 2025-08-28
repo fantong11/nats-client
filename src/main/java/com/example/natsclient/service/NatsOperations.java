@@ -1,8 +1,6 @@
 package com.example.natsclient.service;
 
-import io.nats.client.Message;
 import io.nats.client.api.PublishAck;
-import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -14,17 +12,6 @@ import java.util.concurrent.CompletableFuture;
  * All NATS communication in this application uses JetStream for durability and reliability.
  */
 public interface NatsOperations {
-    
-    /**
-     * Sends a request and waits for a response.
-     * 
-     * @param subject The NATS subject
-     * @param payload The message payload as bytes
-     * @param timeout The request timeout
-     * @return The response message, or null if timeout
-     * @throws Exception if the request fails
-     */
-    Message sendRequest(String subject, byte[] payload, Duration timeout) throws Exception;
     
     /**
      * Publishes a message reliably.

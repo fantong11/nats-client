@@ -111,18 +111,10 @@ public class RetryService {
             request.setUpdatedBy("RETRY_SERVICE");
             requestLogRepository.save(request);
 
-            CompletableFuture<String> future = natsClientService.sendRequest(
-                request.getSubject(), 
-                request.getRequestPayload()
-            );
-
-            future.whenComplete((response, throwable) -> {
-                if (throwable != null) {
-                    handleRetryFailure(request, throwable);
-                } else {
-                    handleRetrySuccess(request, response);
-                }
-            });
+            // Note: Request-reply functionality has been removed
+            // This retry method is no longer functional
+            logger.info("Retry functionality disabled - request-reply removed from system");
+            logger.info("Request ID: {} will not be retried", request.getRequestId());
 
         } catch (Exception e) {
             throw new NatsClientException(

@@ -3,8 +3,10 @@ package com.example.natsclient.service.impl;
 import com.example.natsclient.config.NatsProperties;
 import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.exception.NatsRequestException;
+import com.example.natsclient.model.PublishResult;
 import com.example.natsclient.service.PayloadProcessor;
 import com.example.natsclient.service.RequestLogService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.natsclient.util.NatsMessageUtils;
 import com.example.natsclient.service.factory.MetricsFactory;
 import com.example.natsclient.service.observer.NatsEventPublisher;
@@ -18,6 +20,7 @@ import io.nats.client.impl.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
@@ -26,12 +29,13 @@ import java.util.concurrent.CompletableFuture;
  * Concrete processor for NATS publish operations using JetStream.
  * Implements the Template Method pattern for message publishing.
  */
-public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
+public class NatsPublishProcessor extends AbstractNatsMessageProcessor<PublishResult> {
     
     private static final Logger logger = LoggerFactory.getLogger(NatsPublishProcessor.class);
     
     private final JetStream jetStream;
     private final NatsMessageUtils messageUtils;
+    private final ObjectMapper objectMapper;
     
     public NatsPublishProcessor(
             JetStream jetStream,
@@ -42,24 +46,31 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
             MeterRegistry meterRegistry,
             MetricsFactory metricsFactory,
             NatsMessageUtils messageUtils,
-            NatsEventPublisher eventPublisher) {
+            NatsEventPublisher eventPublisher,
+            ObjectMapper objectMapper) {
         
         super(requestLogService, payloadProcessor, requestValidator, 
               natsProperties, meterRegistry, metricsFactory, eventPublisher, "jetstream_publish");
         this.jetStream = jetStream;
         this.messageUtils = messageUtils;
+        this.objectMapper = objectMapper;
     }
     
     @Override
-    protected CompletableFuture<Void> executeSpecificProcessing(
+    protected CompletableFuture<PublishResult> executeSpecificProcessing(
             String requestId, String subject, Object payload, Instant startTime) {
         
         try {
             // Serialize payload
-            String jsonPayload = payloadProcessor.serialize(payload);
+            String jsonPayload = objectMapper.writeValueAsString(payload);
             
             // Publish to JetStream with request ID as message ID
             PublishAck publishAck = publishToJetStream(subject, jsonPayload, requestId);
+            
+            if (publishAck == null) {
+                throw new RuntimeException("JetStream publish acknowledgment is null - message may not have been persisted. " +
+                        "Check if stream exists for subject: " + subject);
+            }
             
             // Create and save request log with success status
             NatsRequestLog requestLog = createSuccessfulRequestLog(requestId, subject, jsonPayload, publishAck);
@@ -72,7 +83,10 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
             logger.info("JetStream message published successfully in {}ms - Sequence: {}", 
                        duration, publishAck.getSeqno());
             
-            return CompletableFuture.completedFuture(null);
+            PublishResult.Success result = new PublishResult.Success(
+                requestId, publishAck.getSeqno(), subject
+            );
+            return CompletableFuture.completedFuture(result);
             
         } catch (Exception e) {
             return handlePublishError(requestId, subject, e, startTime);
@@ -92,7 +106,12 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
         Headers headers = NatsMessageHeaders.createHeadersWithMessageId(messageId);
         
         // Publish without specifying stream - let JetStream route based on subject  
-        PublishAck publishAck = jetStream.publish(subject, headers, payloadProcessor.toBytes(jsonPayload));
+        PublishAck publishAck = jetStream.publish(subject, headers, jsonPayload.getBytes(StandardCharsets.UTF_8));
+        
+        if (publishAck == null) {
+            throw new RuntimeException("JetStream publish returned null acknowledgment for subject: " + subject + 
+                    ". Possible causes: stream not found, JetStream not enabled, or connection issues");
+        }
         
         logger.debug("JetStream message published with ID '{}' - {}", 
                     messageId, messageUtils.formatPublishAck(publishAck));
@@ -114,7 +133,7 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
     /**
      * Handle publish operation errors.
      */
-    private CompletableFuture<Void> handlePublishError(String requestId, String subject, Exception e, Instant startTime) {
+    private CompletableFuture<PublishResult> handlePublishError(String requestId, String subject, Exception e, Instant startTime) {
         String errorMessage = "Error publishing JetStream message: " + e.getMessage();
         
         requestLogService.updateWithError(requestId, errorMessage);
@@ -123,9 +142,10 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<Void> {
         long duration = Duration.between(startTime, Instant.now()).toMillis();
         logger.error("Failed to publish JetStream message after {}ms", duration, e);
         
-        CompletableFuture<Void> future = new CompletableFuture<>();
-        future.completeExceptionally(new NatsRequestException("Failed to publish JetStream message", requestId, e));
-        return future;
+        PublishResult.Failure result = new PublishResult.Failure(
+            requestId, subject, errorMessage, e.getClass().getSimpleName()
+        );
+        return CompletableFuture.completedFuture(result);
     }
     
     @Override

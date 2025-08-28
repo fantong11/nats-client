@@ -80,12 +80,9 @@ public abstract class AbstractNatsMessageProcessor<T> {
     }
     
     /**
-     * Template method defining the complete message processing workflow.
-     * This method should not be overridden by subclasses.
+     * Template method with pre-generated request ID.
      */
-    public final CompletableFuture<T> processMessage(String subject, Object payload) {
-        // Step 1: Initialize request
-        String requestId = initializeRequest();
+    public final CompletableFuture<T> processMessage(String requestId, String subject, Object payload) {
         String eventId = UUID.randomUUID().toString();
         Instant startTime = Instant.now();
         
@@ -130,13 +127,6 @@ public abstract class AbstractNatsMessageProcessor<T> {
     }
     
     // Template method steps - some with default implementations, others abstract
-    
-    /**
-     * Initialize request with unique ID.
-     */
-    protected String initializeRequest() {
-        return UUID.randomUUID().toString();
-    }
     
     /**
      * Setup MDC context for structured logging.

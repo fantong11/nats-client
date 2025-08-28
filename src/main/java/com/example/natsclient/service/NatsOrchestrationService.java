@@ -2,11 +2,13 @@ package com.example.natsclient.service;
 
 import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.exception.NatsClientException;
+import com.example.natsclient.model.PublishResult;
 import com.example.natsclient.repository.NatsRequestLogRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.natsclient.service.contract.RequestTrackingContext;
+import com.example.natsclient.service.contract.RequestTrackingStrategy;
 import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,82 +21,13 @@ import java.util.concurrent.CompletableFuture;
 @Service
 @Transactional
 @Slf4j
+@RequiredArgsConstructor
 public class NatsOrchestrationService {
 
+    private final NatsClientService natsClientService;
+    private final NatsRequestLogRepository requestLogRepository;
+    private final RequestTrackingStrategy trackingStrategy;
 
-    @Autowired
-    private NatsClientService natsClientService;
-
-    @Autowired
-    private NatsRequestLogRepository requestLogRepository;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    public CompletableFuture<NatsRequestResponse> sendRequestWithTracking(NatsRequest request) {
-        String requestId = generateRequestId();
-        
-        log.info("Processing NATS request - Subject: {}, RequestID: {}", 
-                   request.getSubject(), requestId);
-
-        try {
-            validateRequest(request);
-            
-            CompletableFuture<String> natsResponse = natsClientService.sendRequest(
-                request.getSubject(), 
-                request.getPayload()
-            );
-
-            return natsResponse.thenApply(response -> {
-                NatsRequestResponse result = new NatsRequestResponse();
-                result.setRequestId(requestId);
-                result.setSubject(request.getSubject());
-                result.setSuccess(response != null);
-                
-                // 嘗試將 JSON 字串解析為物件
-                if (response != null) {
-                    try {
-                        Object jsonObject = objectMapper.readValue(response, Object.class);
-                        result.setResponsePayload(jsonObject);
-                    } catch (Exception e) {
-                        // 如果不是有效的 JSON，就直接返回字串
-                        result.setResponsePayload(response);
-                        log.debug("Response is not valid JSON, returning as string: {}", e.getMessage());
-                    }
-                } else {
-                    result.setErrorMessage("No response received");
-                }
-                
-                result.setTimestamp(LocalDateTime.now());
-                return result;
-            }).exceptionally(throwable -> {
-                log.error("Error processing NATS request", throwable);
-                
-                NatsRequestResponse errorResult = new NatsRequestResponse();
-                errorResult.setRequestId(requestId);
-                errorResult.setSubject(request.getSubject());
-                errorResult.setSuccess(false);
-                errorResult.setErrorMessage(throwable.getMessage());
-                errorResult.setTimestamp(LocalDateTime.now());
-                
-                return errorResult;
-            });
-
-        } catch (Exception e) {
-            log.error("Failed to send NATS request", e);
-            
-            CompletableFuture<NatsRequestResponse> errorFuture = new CompletableFuture<>();
-            NatsRequestResponse errorResult = new NatsRequestResponse();
-            errorResult.setRequestId(requestId);
-            errorResult.setSubject(request.getSubject());
-            errorResult.setSuccess(false);
-            errorResult.setErrorMessage(e.getMessage());
-            errorResult.setTimestamp(LocalDateTime.now());
-            
-            errorFuture.complete(errorResult);
-            return errorFuture;
-        }
-    }
 
     public CompletableFuture<String> publishMessageWithTracking(NatsPublishRequest request) {
         log.info("Publishing NATS message - Subject: {}", request.getSubject());
@@ -102,28 +35,47 @@ public class NatsOrchestrationService {
         try {
             validatePublishRequest(request);
             
-            return natsClientService.publishMessage(request.getSubject(), request.getPayload())
-                .thenApply(result -> {
-                    // 生成並返回請求ID
-                    String requestId = UUID.randomUUID().toString();
-                    log.info("Message published successfully with request ID: {}", requestId);
-                    return requestId;
-                });
+            String requestId = generateRequestId();
+            RequestTrackingContext context = trackingStrategy.processRequest(request, requestId);
+            
+            return natsClientService.publishMessage(requestId, request.getSubject(), context.getPublishPayload())
+                .thenApply(publishResult -> handlePublishResult(publishResult, context));
 
         } catch (Exception e) {
-            log.error("Failed to publish NATS message", e);
-            
-            CompletableFuture<String> errorFuture = new CompletableFuture<>();
-            errorFuture.completeExceptionally(new NatsClientException(
-                "Failed to publish message: " + e.getMessage(),
-                e,
-                null,
-                request.getSubject(),
-                NatsClientException.ErrorType.UNKNOWN_ERROR
-            ));
-            
-            return errorFuture;
+            return handlePublishError(e, request);
         }
+    }
+    
+    private String handlePublishResult(PublishResult publishResult, RequestTrackingContext context) {
+        if (publishResult instanceof PublishResult.Success success) {
+            log.info("Message published successfully - RequestID: {}, Sequence: {}", 
+                    context.getRequestId(), success.sequence());
+            trackingStrategy.handlePublishSuccess(context);
+            return context.getRequestId();
+        } 
+        
+        if (publishResult instanceof PublishResult.Failure failure) {
+            log.error("Message publish failed - RequestID: {}, Error: {}", 
+                    failure.requestId(), failure.errorMessage());
+            throw new RuntimeException("Publish failed: " + failure.errorMessage());
+        }
+        
+        throw new IllegalStateException("Unknown publish result type: " + publishResult.getClass());
+    }
+    
+    private CompletableFuture<String> handlePublishError(Exception e, NatsPublishRequest request) {
+        log.error("Failed to publish NATS message", e);
+        
+        CompletableFuture<String> errorFuture = new CompletableFuture<>();
+        errorFuture.completeExceptionally(new NatsClientException(
+            "Failed to publish message: " + e.getMessage(),
+            e,
+            null,
+            request.getSubject(),
+            NatsClientException.ErrorType.UNKNOWN_ERROR
+        ));
+        
+        return errorFuture;
     }
 
     public NatsRequestStatus getRequestStatus(String requestId) {
@@ -197,34 +149,6 @@ public class NatsOrchestrationService {
         return stats;
     }
 
-    private void validateRequest(NatsRequest request) {
-        if (request == null) {
-            throw new NatsClientException(
-                "Request cannot be null",
-                null,
-                null,
-                NatsClientException.ErrorType.VALIDATION_ERROR
-            );
-        }
-        
-        if (request.getSubject() == null || request.getSubject().trim().isEmpty()) {
-            throw new NatsClientException(
-                "Subject cannot be null or empty",
-                null,
-                request.getSubject(),
-                NatsClientException.ErrorType.VALIDATION_ERROR
-            );
-        }
-        
-        if (request.getPayload() == null) {
-            throw new NatsClientException(
-                "Payload cannot be null",
-                null,
-                request.getSubject(),
-                NatsClientException.ErrorType.VALIDATION_ERROR
-            );
-        }
-    }
 
     private void validatePublishRequest(NatsPublishRequest request) {
         if (request == null) {
@@ -259,26 +183,19 @@ public class NatsOrchestrationService {
         return "REQ-" + UUID.randomUUID().toString();
     }
 
-    @Data
-    public static class NatsRequest {
-        private String subject;
-        private Object payload;
-    }
 
     @Data
     public static class NatsPublishRequest {
         private String subject;
         private Object payload;
+        private String responseSubject;
+        private String responseIdField;
     }
-
+    
     @Data
-    public static class NatsRequestResponse {
-        private String requestId;
+    public static class ListenerStartRequest {
         private String subject;
-        private boolean success;
-        private Object responsePayload;
-        private String errorMessage;
-        private LocalDateTime timestamp;
+        private String idField;
     }
 
     @Data
@@ -302,4 +219,5 @@ public class NatsOrchestrationService {
         private long errorRequests;
         private double successRate;
     }
+    
 }
