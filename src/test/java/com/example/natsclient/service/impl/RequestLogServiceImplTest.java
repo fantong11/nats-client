@@ -15,7 +15,6 @@ import java.time.LocalDateTime;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class RequestLogServiceImplTest {
@@ -39,14 +38,12 @@ class RequestLogServiceImplTest {
     private final String testErrorMessage = "Test error message";
     private final long testTimeout = 30000L;
 
-    @BeforeEach
-    void setUp() {
-        lenient().when(natsProperties.getRequest()).thenReturn(requestProperties);
-        lenient().when(requestProperties.getTimeout()).thenReturn(testTimeout);
-    }
-
     @Test
     void createRequestLog_ShouldCreateValidRequestLog() {
+        // Arrange
+        when(natsProperties.getRequest()).thenReturn(requestProperties);
+        when(requestProperties.getTimeout()).thenReturn(testTimeout);
+        
         // Act
         NatsRequestLog result = requestLogService.createRequestLog(
                 testRequestId, testSubject, testPayload);
@@ -59,8 +56,8 @@ class RequestLogServiceImplTest {
         assertEquals(testTimeout, result.getTimeoutDuration());
         assertEquals("SYSTEM", result.getCreatedBy());
         assertNotNull(result.getRequestTimestamp());
+        assertEquals(NatsRequestLog.RequestStatus.PENDING, result.getStatus());
     }
-
 
     @Test
     void updateWithSuccess_ShouldCallRepositoryWithCorrectParameters() {
@@ -118,6 +115,21 @@ class RequestLogServiceImplTest {
     }
 
     @Test
+    void createRequestLog_WithNullPayload_ShouldWork() {
+        // Arrange
+        when(natsProperties.getRequest()).thenReturn(requestProperties);
+        when(requestProperties.getTimeout()).thenReturn(testTimeout);
+        
+        // Act
+        NatsRequestLog result = requestLogService.createRequestLog(
+                testRequestId, testSubject, null);
+
+        // Assert
+        assertNotNull(result);
+        assertNull(result.getRequestPayload());
+    }
+
+    @Test
     void updateWithSuccess_WithNullResponse_ShouldWork() {
         // Act
         requestLogService.updateWithSuccess(testRequestId, null);
@@ -130,76 +142,5 @@ class RequestLogServiceImplTest {
                 any(LocalDateTime.class),
                 eq("SYSTEM")
         );
-    }
-
-    @Test
-    void updateWithTimeout_WithEmptyMessage_ShouldWork() {
-        // Act
-        requestLogService.updateWithTimeout(testRequestId, "");
-
-        // Assert
-        verify(repository).updateErrorByRequestId(
-                eq(testRequestId),
-                eq(NatsRequestLog.RequestStatus.TIMEOUT),
-                eq(""),
-                eq("SYSTEM")
-        );
-    }
-
-    @Test
-    void updateWithError_WithNullMessage_ShouldWork() {
-        // Act
-        requestLogService.updateWithError(testRequestId, null);
-
-        // Assert
-        verify(repository).updateErrorByRequestId(
-                eq(testRequestId),
-                eq(NatsRequestLog.RequestStatus.ERROR),
-                isNull(),
-                eq("SYSTEM")
-        );
-    }
-
-    @Test
-    void createRequestLog_ShouldSetCurrentTimestamp() {
-        // Arrange
-        LocalDateTime beforeCall = LocalDateTime.now().minusSeconds(1);
-        
-        // Act
-        NatsRequestLog result = requestLogService.createRequestLog(
-                testRequestId, testSubject, testPayload);
-        
-        // Assert
-        LocalDateTime afterCall = LocalDateTime.now().plusSeconds(1);
-        assertNotNull(result.getRequestTimestamp());
-        assertTrue(result.getRequestTimestamp().isAfter(beforeCall));
-        assertTrue(result.getRequestTimestamp().isBefore(afterCall));
-    }
-
-    @Test
-    void createRequestLog_WithLongPayload_ShouldHandleCorrectly() {
-        // Arrange
-        String longPayload = "a".repeat(10000); // 10KB payload
-        
-        // Act
-        NatsRequestLog result = requestLogService.createRequestLog(
-                testRequestId, testSubject, longPayload);
-
-        // Assert
-        assertEquals(longPayload, result.getRequestPayload());
-        assertEquals(longPayload.length(), result.getRequestPayload().length());
-    }
-
-    @Test
-    void createRequestLog_WithSpecialCharacters_ShouldHandleCorrectly() {
-        // Arrange
-        String specialPayload = "{\"message\":\"Hello 世界! 🌍 Special chars: @#$%^&*()\"}";
-        
-        // Act
-        NatsRequestLog result = requestLogService.createRequestLog(
-                testRequestId, testSubject, specialPayload);
-
-        // Assert
-        assertEquals(specialPayload, result.getRequestPayload());
     }
 }

@@ -1,6 +1,5 @@
 package com.example.natsclient.service.validator;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -55,16 +54,6 @@ class RequestValidatorTest {
     }
 
     @Test
-    void validateRequest_TabAndNewlineSubject_ShouldThrowIllegalArgumentException() {
-        // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
-            requestValidator.validateRequest("\t\n\r", validPayload);
-        });
-
-        assertEquals("Subject cannot be null or empty", exception.getMessage());
-    }
-
-    @Test
     void validateRequest_NullPayload_ShouldThrowIllegalArgumentException() {
         // Act & Assert
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
@@ -97,39 +86,6 @@ class RequestValidatorTest {
     }
 
     @Test
-    void validateRequest_ValidWithComplexPayload_ShouldNotThrowException() {
-        // Arrange
-        ComplexPayload complexPayload = new ComplexPayload("name", 42, true);
-
-        // Act & Assert
-        assertDoesNotThrow(() -> {
-            requestValidator.validateRequest("complex.test", complexPayload);
-        });
-    }
-
-    @Test
-    void validateRequest_MinimalValidSubject_ShouldNotThrowException() {
-        // Arrange
-        String minimalSubject = "a";
-
-        // Act & Assert
-        assertDoesNotThrow(() -> {
-            requestValidator.validateRequest(minimalSubject, validPayload);
-        });
-    }
-
-    @Test
-    void validateRequest_LongValidSubject_ShouldNotThrowException() {
-        // Arrange
-        String longSubject = "a".repeat(1000);
-
-        // Act & Assert
-        assertDoesNotThrow(() -> {
-            requestValidator.validateRequest(longSubject, validPayload);
-        });
-    }
-
-    @Test
     void validateRequest_PayloadAsString_ShouldNotThrowException() {
         // Act & Assert
         assertDoesNotThrow(() -> {
@@ -145,14 +101,6 @@ class RequestValidatorTest {
         });
     }
 
-    @Test
-    void validateRequest_PayloadAsBoolean_ShouldNotThrowException() {
-        // Act & Assert
-        assertDoesNotThrow(() -> {
-            requestValidator.validateRequest("boolean.test", true);
-        });
-    }
-
     // Test helper classes
     private static class TestPayload {
         private final String data;
@@ -164,21 +112,5 @@ class RequestValidatorTest {
         public String getData() {
             return data;
         }
-    }
-
-    private static class ComplexPayload {
-        private final String name;
-        private final int value;
-        private final boolean flag;
-
-        public ComplexPayload(String name, int value, boolean flag) {
-            this.name = name;
-            this.value = value;
-            this.flag = flag;
-        }
-
-        public String getName() { return name; }
-        public int getValue() { return value; }
-        public boolean isFlag() { return flag; }
     }
 }

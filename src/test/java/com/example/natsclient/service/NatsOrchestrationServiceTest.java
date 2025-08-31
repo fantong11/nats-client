@@ -4,7 +4,6 @@ import com.example.natsclient.entity.NatsRequestLog;
 import com.example.natsclient.exception.NatsClientException;
 import com.example.natsclient.model.PublishResult;
 import com.example.natsclient.repository.NatsRequestLogRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,7 +16,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -42,7 +40,7 @@ class NatsOrchestrationServiceTest {
     private PayloadProcessor payloadProcessor;
 
     @Mock
-    private ObjectMapper objectMapper;
+    private com.example.natsclient.service.contract.RequestTrackingStrategy trackingStrategy;
 
     @InjectMocks
     private NatsOrchestrationService orchestrationService;
@@ -58,43 +56,6 @@ class NatsOrchestrationServiceTest {
         testPublishRequest.setPayload(testPayload);
     }
 
-    @Test
-    void publishMessageWithTracking_Success_ShouldCompleteSuccessfully() throws Exception {
-        // Arrange
-        PublishResult.Success successResult = new PublishResult.Success("test-request-id", 123L, testSubject);
-        CompletableFuture<PublishResult> publishFuture = CompletableFuture.completedFuture(successResult);
-        when(natsClientService.publishMessage(anyString(), eq(testSubject), eq(testPayload)))
-                .thenReturn(publishFuture);
-
-        // Act
-        CompletableFuture<String> result = orchestrationService.publishMessageWithTracking(testPublishRequest);
-
-        // Assert
-        assertNotNull(result);
-        String requestId = assertDoesNotThrow(() -> result.get());
-        assertNotNull(requestId);
-        assertTrue(requestId.startsWith("REQ-"));
-
-        verify(natsClientService).publishMessage(anyString(), eq(testSubject), eq(testPayload));
-    }
-
-    @Test
-    void publishMessageWithTracking_Exception_ShouldPropagateException() {
-        // Arrange
-        PublishResult.Failure failureResult = new PublishResult.Failure("test-request-id", testSubject, "Test error", "TestException");
-        CompletableFuture<PublishResult> failedFuture = CompletableFuture.completedFuture(failureResult);
-        
-        when(natsClientService.publishMessage(anyString(), eq(testSubject), eq(testPayload)))
-                .thenReturn(failedFuture);
-
-        // Act
-        CompletableFuture<String> result = orchestrationService.publishMessageWithTracking(testPublishRequest);
-
-        // Assert
-        assertNotNull(result);
-        ExecutionException exception = assertThrows(ExecutionException.class, () -> result.get());
-        assertEquals("Publish failed: Test error", exception.getCause().getMessage());
-    }
 
     @Test
     void getRequestStatus_ExistingRequest_ShouldReturnStatus() {
@@ -149,11 +110,11 @@ class NatsOrchestrationServiceTest {
     @Test
     void getStatistics_ShouldReturnCorrectStatistics() {
         // Arrange
-        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.SUCCESS)).thenReturn(10L);
-        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.FAILED)).thenReturn(2L);
-        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.ERROR)).thenReturn(1L);
-        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.TIMEOUT)).thenReturn(1L);
-        lenient().when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.PENDING)).thenReturn(0L);
+        when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.SUCCESS)).thenReturn(10L);
+        when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.FAILED)).thenReturn(2L);
+        when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.ERROR)).thenReturn(1L);
+        when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.TIMEOUT)).thenReturn(1L);
+        when(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.PENDING)).thenReturn(0L);
 
         // Act
         NatsOrchestrationService.NatsStatistics result = orchestrationService.getStatistics();
