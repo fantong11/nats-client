@@ -229,16 +229,7 @@ model/
 └── PublishResult.java                 # Publishing operation results
 ```
 
-### 8. Metrics Package (`metrics/`)
-**Purpose**: Application metrics and monitoring
-
-```
-metrics/
-├── NatsMetricsCollector.java          # Metrics collection logic
-└── NatsMetricsConfiguration.java      # Metrics configuration
-```
-
-### 9. Utility Package (`util/`)
+### 8. Utility Package (`util/`)
 **Purpose**: Common utility classes and helpers
 
 ```
