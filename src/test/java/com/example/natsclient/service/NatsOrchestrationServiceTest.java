@@ -25,7 +25,7 @@ import static org.mockito.Mockito.*;
 class NatsOrchestrationServiceTest {
 
     @Mock
-    private NatsClientService natsClientService;
+    private NatsMessageService natsMessageService;
 
     @Mock
     private NatsRequestLogRepository requestLogRepository;

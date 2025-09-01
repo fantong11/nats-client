@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class NatsOrchestrationService {
 
-    private final NatsClientService natsClientService;
+    private final NatsMessageService natsMessageService;
     private final NatsRequestLogRepository requestLogRepository;
     private final RequestTrackingStrategy trackingStrategy;
 
@@ -38,7 +38,7 @@ public class NatsOrchestrationService {
             String requestId = generateRequestId();
             RequestTrackingContext context = trackingStrategy.processRequest(request, requestId);
             
-            return natsClientService.publishMessage(requestId, request.getSubject(), context.getPublishPayload())
+            return natsMessageService.publishMessage(requestId, request.getSubject(), context.getPublishPayload())
                 .thenApply(publishResult -> handlePublishResult(publishResult, context));
 
         } catch (Exception e) {
