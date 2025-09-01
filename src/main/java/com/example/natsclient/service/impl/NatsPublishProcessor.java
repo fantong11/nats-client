@@ -123,7 +123,7 @@ public class NatsPublishProcessor extends AbstractNatsMessageProcessor<PublishRe
      * Create a successful request log entry with publish acknowledgment details.
      */
     private NatsRequestLog createSuccessfulRequestLog(String requestId, String subject, String jsonPayload, PublishAck publishAck) {
-        NatsRequestLog requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload);
+        NatsRequestLog requestLog = requestLogService.createRequestLog(requestId, subject, jsonPayload, null, null);
         requestLog.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
         requestLog.setResponsePayload("JetStream Publish ACK - Sequence: " + publishAck.getSeqno() + 
                                     ", Stream: " + publishAck.getStream());

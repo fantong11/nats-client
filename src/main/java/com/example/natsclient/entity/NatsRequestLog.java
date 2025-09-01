@@ -74,6 +74,13 @@ public class NatsRequestLog {
     @UpdateTimestamp
     @Column(name = "UPDATED_DATE")
     private LocalDateTime updatedDate;
+    
+    // Fields for response tracking and listener recovery after restart
+    @Column(name = "RESPONSE_SUBJECT")
+    private String responseSubject;
+    
+    @Column(name = "RESPONSE_ID_FIELD") 
+    private String responseIdField;
 
     public enum RequestStatus {
         PENDING, SUCCESS, FAILED, TIMEOUT, ERROR

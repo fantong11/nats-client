@@ -187,7 +187,7 @@ metadata:
   labels:
     app: nats-client-app
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: nats-client-app
@@ -219,6 +219,18 @@ spec:
           value: "K8S_STREAM"
         - name: NATS_JETSTREAM_STORAGE
           value: "MEMORY"
+        # Listener Recovery Configuration
+        - name: NATS_LISTENER_RECOVERY_ENABLED
+          value: "true"
+        - name: NATS_LISTENER_RECOVERY_LOCKTIMEOUTMINUTES
+          value: "5"
+        - name: NATS_LISTENER_RECOVERY_MAXRETRYATTEMPTS
+          value: "2"
+        # Enhanced logging for testing
+        - name: LOGGING_LEVEL_COM_EXAMPLE_NATSCLIENT_SERVICE_STARTUP
+          value: "DEBUG"
+        - name: LOGGING_LEVEL_ROOT
+          value: "INFO"
         resources:
           requests:
             memory: "512Mi"

@@ -33,6 +33,12 @@ public class PayloadIdTrackingStrategy implements RequestTrackingStrategy {
         
         if (hasResponseTracking) {
             payloadId = extractPayloadId(request.getPayload(), request.getResponseIdField());
+            
+            // Subscribe BEFORE publishing to avoid race condition
+            responseListenerManager.ensureListenerActive(
+                request.getResponseSubject(), 
+                request.getResponseIdField()
+            );
         }
         
         return RequestTrackingContext.builder()
@@ -56,12 +62,8 @@ public class PayloadIdTrackingStrategy implements RequestTrackingStrategy {
     public void handlePublishSuccess(RequestTrackingContext context) {
         updateRequestLogStatus(context);
         
-        if (context.isRequiresResponseTracking()) {
-            responseListenerManager.ensureListenerActive(
-                context.getResponseSubject(), 
-                context.getResponseIdField()
-            );
-        }
+        // Listener is already active (subscribed before publishing)
+        // No additional action needed here
     }
     
     private boolean hasResponseTrackingConfig(NatsOrchestrationService.NatsPublishRequest request) {

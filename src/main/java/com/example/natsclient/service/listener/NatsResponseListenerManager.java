@@ -25,13 +25,33 @@ public class NatsResponseListenerManager implements ResponseListenerManager {
     @Override
     public void ensureListenerActive(String responseSubject, String responseIdField) {
         try {
-            if (!isListenerActive(responseSubject)) {
+            if (!isCompatibleListenerActive(responseSubject, responseIdField)) {
                 startResponseListener(responseSubject, responseIdField);
             } else {
-                log.debug("Response listener already active for subject '{}'", responseSubject);
+                log.debug("Compatible response listener already active for subject '{}' with ID field '{}'", 
+                         responseSubject, responseIdField);
             }
         } catch (Exception e) {
             log.error("Error ensuring response listener for subject '{}'", responseSubject, e);
+        }
+    }
+    
+    /**
+     * Check if there's a compatible listener active for the given subject and ID field.
+     * A compatible listener must have the same subject AND the same responseIdField.
+     */
+    private boolean isCompatibleListenerActive(String responseSubject, String responseIdField) {
+        // Use getListenerStatus to check if there's a compatible listener
+        try {
+            return natsListenerService.getListenerStatus()
+                .thenApply(statuses -> statuses.stream()
+                    .anyMatch(status -> 
+                        status.subject().equals(responseSubject) && 
+                        status.idFieldName().equals(responseIdField)))
+                .get(); // Block to get the result synchronously
+        } catch (Exception e) {
+            log.warn("Error checking listener compatibility for subject '{}', assuming no compatible listener exists", responseSubject, e);
+            return false;
         }
     }
     

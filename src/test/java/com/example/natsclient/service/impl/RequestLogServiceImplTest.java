@@ -46,7 +46,7 @@ class RequestLogServiceImplTest {
         
         // Act
         NatsRequestLog result = requestLogService.createRequestLog(
-                testRequestId, testSubject, testPayload);
+                testRequestId, testSubject, testPayload, null, null);
 
         // Assert
         assertNotNull(result);
@@ -122,7 +122,7 @@ class RequestLogServiceImplTest {
         
         // Act
         NatsRequestLog result = requestLogService.createRequestLog(
-                testRequestId, testSubject, null);
+                testRequestId, testSubject, null, null, null);
 
         // Assert
         assertNotNull(result);

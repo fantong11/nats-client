@@ -11,6 +11,9 @@ CREATE TABLE NATS_REQUEST_LOG (
     ERROR_MESSAGE CLOB,
     RETRY_COUNT NUMBER(3) DEFAULT 0,
     TIMEOUT_DURATION NUMBER(10),
+    -- New fields for response tracking and listener recovery
+    RESPONSE_SUBJECT VARCHAR2(255),
+    RESPONSE_ID_FIELD VARCHAR2(100),
     CREATED_BY VARCHAR2(100),
     UPDATED_BY VARCHAR2(100),
     CREATED_DATE TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -48,6 +51,7 @@ END;
 CREATE INDEX IDX_NATS_REQ_REQUEST_ID ON NATS_REQUEST_LOG(REQUEST_ID);
 CREATE INDEX IDX_NATS_REQ_STATUS ON NATS_REQUEST_LOG(STATUS);
 CREATE INDEX IDX_NATS_REQ_TIMESTAMP ON NATS_REQUEST_LOG(REQUEST_TIMESTAMP);
+CREATE INDEX IDX_NATS_REQ_RESPONSE_SUBJECT ON NATS_REQUEST_LOG(RESPONSE_SUBJECT);
 
 -- Comments for table and columns
 COMMENT ON TABLE NATS_REQUEST_LOG IS 'Table to track NATS requests and responses';
@@ -56,3 +60,38 @@ COMMENT ON COLUMN NATS_REQUEST_LOG.SUBJECT IS 'NATS subject/topic';
 COMMENT ON COLUMN NATS_REQUEST_LOG.STATUS IS 'Request status: PENDING, SUCCESS, FAILED, TIMEOUT, ERROR';
 COMMENT ON COLUMN NATS_REQUEST_LOG.RETRY_COUNT IS 'Number of retry attempts made';
 COMMENT ON COLUMN NATS_REQUEST_LOG.TIMEOUT_DURATION IS 'Timeout duration in milliseconds';
+COMMENT ON COLUMN NATS_REQUEST_LOG.RESPONSE_SUBJECT IS 'NATS subject to listen for responses';
+COMMENT ON COLUMN NATS_REQUEST_LOG.RESPONSE_ID_FIELD IS 'JSON field name to extract ID from responses';
+
+-- ================================================================================================
+-- Distributed Lock Table for Multi-Pod Coordination
+-- ================================================================================================
+
+-- Listener Recovery Lock Table
+CREATE TABLE LISTENER_RECOVERY_LOCK (
+    LOCK_KEY VARCHAR2(50) PRIMARY KEY,
+    POD_ID VARCHAR2(100) NOT NULL,
+    ACQUIRED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    EXPIRES_AT TIMESTAMP NOT NULL,
+    STATUS VARCHAR2(20) DEFAULT 'ACTIVE'
+);
+
+-- Create indexes for lock table
+CREATE INDEX IDX_LOCK_EXPIRES_AT ON LISTENER_RECOVERY_LOCK(EXPIRES_AT);
+CREATE INDEX IDX_LOCK_STATUS ON LISTENER_RECOVERY_LOCK(STATUS);
+
+-- Comments for lock table
+COMMENT ON TABLE LISTENER_RECOVERY_LOCK IS 'Distributed lock table for coordinating listener recovery across multiple pods';
+COMMENT ON COLUMN LISTENER_RECOVERY_LOCK.LOCK_KEY IS 'Unique identifier for the lock type';
+COMMENT ON COLUMN LISTENER_RECOVERY_LOCK.POD_ID IS 'Identifier of the pod holding the lock (typically hostname in K8s)';
+COMMENT ON COLUMN LISTENER_RECOVERY_LOCK.ACQUIRED_AT IS 'Timestamp when the lock was acquired';
+COMMENT ON COLUMN LISTENER_RECOVERY_LOCK.EXPIRES_AT IS 'Timestamp when the lock expires';
+COMMENT ON COLUMN LISTENER_RECOVERY_LOCK.STATUS IS 'Lock status: ACTIVE, COMPLETED, EXPIRED';
+
+-- ================================================================================================
+-- Sample Data (Optional - for development/testing)
+-- ================================================================================================
+
+-- Sample lock entry (commented out - only for reference)
+-- INSERT INTO LISTENER_RECOVERY_LOCK (LOCK_KEY, POD_ID, EXPIRES_AT, STATUS) 
+-- VALUES ('LISTENER_RECOVERY', 'test-pod', CURRENT_TIMESTAMP + INTERVAL '10' MINUTE, 'COMPLETED');
