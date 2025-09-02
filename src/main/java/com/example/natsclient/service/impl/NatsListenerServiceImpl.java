@@ -1,100 +1,63 @@
 package com.example.natsclient.service.impl;
 
-import com.example.natsclient.config.NatsProperties;
 import com.example.natsclient.model.ListenerResult;
 import com.example.natsclient.service.NatsListenerService;
-import com.example.natsclient.util.JsonIdExtractor;
+import com.example.natsclient.service.config.ConsumerConfigurationFactory;
+import com.example.natsclient.service.handler.MessageProcessor;
+import com.example.natsclient.service.registry.ListenerRegistry;
 import io.nats.client.*;
 import io.nats.client.api.ConsumerConfiguration;
-import io.nats.client.api.DeliverPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.function.Consumer;
 
 /**
- * Implementation of NatsListenerService using JetStream for reliable message consumption.
+ * Clean Code implementation of NatsListenerService following SOLID principles.
+ * 
+ * - SRP: Delegates specific responsibilities to specialized components
+ * - OCP: Extensible through dependency injection and configuration
+ * - LSP: Properly implements the NatsListenerService interface
+ * - ISP: Uses focused interfaces and dependencies
+ * - DIP: Depends on abstractions, not concrete implementations
  */
 @Service
 public class NatsListenerServiceImpl implements NatsListenerService {
     
     private static final Logger logger = LoggerFactory.getLogger(NatsListenerServiceImpl.class);
     
+    private final Connection natsConnection;
     private final JetStream jetStream;
-    private final JsonIdExtractor jsonIdExtractor;
-    private final NatsProperties natsProperties;
+    private final ConsumerConfigurationFactory configFactory;
+    private final MessageProcessor messageProcessor;
+    private final ListenerRegistry listenerRegistry;
     
-    // Map to store active listeners
-    private final ConcurrentMap<String, ActiveListener> activeListeners = new ConcurrentHashMap<>();
-    
-    @Autowired
-    public NatsListenerServiceImpl(JetStream jetStream, JsonIdExtractor jsonIdExtractor, NatsProperties natsProperties) {
+    public NatsListenerServiceImpl(Connection natsConnection, 
+                                  JetStream jetStream,
+                                  ConsumerConfigurationFactory configFactory,
+                                  MessageProcessor messageProcessor,
+                                  ListenerRegistry listenerRegistry) {
+        this.natsConnection = natsConnection;
         this.jetStream = jetStream;
-        this.jsonIdExtractor = jsonIdExtractor;
-        this.natsProperties = natsProperties;
+        this.configFactory = configFactory;
+        this.messageProcessor = messageProcessor;
+        this.listenerRegistry = listenerRegistry;
     }
     
     @Override
-    public CompletableFuture<String> startListener(String subject, String idFieldName, Consumer<ListenerResult.MessageReceived> messageHandler) {
+    public CompletableFuture<String> startListener(String subject, String idFieldName, 
+                                                  Consumer<ListenerResult.MessageReceived> messageHandler) {
         return CompletableFuture.supplyAsync(() -> {
+            validateInputs(subject, idFieldName, messageHandler);
+            
             try {
-                String listenerId = "listener-" + UUID.randomUUID().toString();
-                String consumerName = "consumer-" + subject.replace(".", "-") + "-" + System.currentTimeMillis();
-                
-                logger.info("Starting listener for subject '{}' with ID field '{}' and consumer '{}'", 
-                           subject, idFieldName, consumerName);
-                
-                // Create consumer configuration
-                ConsumerConfiguration consumerConfig = ConsumerConfiguration.builder()
-                    .name(consumerName)
-                    .deliverPolicy(DeliverPolicy.New) // Only receive new messages
-                    .ackWait(Duration.ofSeconds(30))
-                    .maxDeliver(3)
-                    .build();
-                
-                // Create message handler
-                MessageHandler natsMessageHandler = (message) -> {
-                    handleIncomingMessage(listenerId, subject, idFieldName, message, messageHandler);
-                };
-                
-                // Subscribe to the subject
-                JetStreamSubscription subscription = jetStream.subscribe(
-                    subject, 
-                    PullSubscribeOptions.builder()
-                        .configuration(consumerConfig)
-                        .build()
-                );
-                
-                // Create and store active listener info
-                ActiveListener activeListener = new ActiveListener(
-                    listenerId,
-                    subject,
-                    idFieldName,
-                    subscription,
-                    messageHandler,
-                    Instant.now()
-                );
-                
-                activeListeners.put(listenerId, activeListener);
-                
-                // Start message pulling in background
-                startMessagePulling(activeListener);
-                
-                logger.info("Successfully started listener '{}' for subject '{}'", listenerId, subject);
-                return listenerId;
-                
+                return doStartListener(subject, idFieldName, messageHandler);
             } catch (Exception e) {
                 logger.error("Failed to start listener for subject '{}'", subject, e);
-                throw new RuntimeException("Failed to start listener: " + e.getMessage(), e);
+                throw new ListenerStartupException("Failed to start listener for subject: " + subject, e);
             }
         });
     }
@@ -102,19 +65,13 @@ public class NatsListenerServiceImpl implements NatsListenerService {
     @Override
     public CompletableFuture<Void> stopListener(String listenerId) {
         return CompletableFuture.runAsync(() -> {
-            ActiveListener listener = activeListeners.remove(listenerId);
-            if (listener != null) {
-                try {
-                    listener.subscription.unsubscribe();
-                    listener.status = "STOPPED";
-                    logger.info("Successfully stopped listener '{}' for subject '{}'", 
-                              listenerId, listener.subject);
-                } catch (Exception e) {
-                    logger.error("Error stopping listener '{}'", listenerId, e);
-                    throw new RuntimeException("Failed to stop listener: " + e.getMessage(), e);
-                }
-            } else {
-                logger.warn("Listener '{}' not found or already stopped", listenerId);
+            validateListenerId(listenerId);
+            
+            try {
+                doStopListener(listenerId);
+            } catch (Exception e) {
+                logger.error("Failed to stop listener '{}'", listenerId, e);
+                throw new ListenerStopException("Failed to stop listener: " + listenerId, e);
             }
         });
     }
@@ -122,158 +79,142 @@ public class NatsListenerServiceImpl implements NatsListenerService {
     @Override
     public CompletableFuture<Void> stopAllListeners() {
         return CompletableFuture.runAsync(() -> {
-            logger.info("Stopping all {} active listeners", activeListeners.size());
+            int listenerCount = listenerRegistry.getActiveListenerCount();
+            logger.info("Stopping all {} active listeners", listenerCount);
             
-            for (String listenerId : activeListeners.keySet()) {
-                try {
-                    stopListener(listenerId).join();
-                } catch (Exception e) {
-                    logger.error("Error stopping listener '{}'", listenerId, e);
-                }
-            }
+            List<String> listenerIds = listenerRegistry.getAllListenerIds();
+            stopListenersGracefully(listenerIds);
             
-            activeListeners.clear();
-            logger.info("All listeners stopped");
+            listenerRegistry.clearAll();
+            logger.info("All listeners stopped successfully");
         });
     }
     
     @Override
     public CompletableFuture<List<ListenerStatus>> getListenerStatus() {
-        return CompletableFuture.supplyAsync(() -> {
-            return activeListeners.values().stream()
-                .map(listener -> new ListenerStatus(
-                    listener.listenerId,
-                    listener.subject,
-                    listener.idFieldName,
-                    listener.status,
-                    listener.messagesReceived,
-                    listener.startTime,
-                    listener.lastMessageTime
-                ))
-                .toList();
-        });
+        return CompletableFuture.supplyAsync(listenerRegistry::getAllListenerStatuses);
     }
     
     @Override
     public boolean isListenerActive(String subject) {
-        return activeListeners.values().stream()
-            .anyMatch(listener -> listener.subject.equals(subject) && "ACTIVE".equals(listener.status));
+        validateSubject(subject);
+        return listenerRegistry.hasActiveListenerFor(subject);
     }
     
-    /**
-     * Start pulling messages from JetStream subscription in a background thread.
-     */
-    private void startMessagePulling(ActiveListener listener) {
-        Thread messageThread = new Thread(() -> {
-            logger.info("Starting message pulling for listener '{}'", listener.listenerId);
-            
-            while ("ACTIVE".equals(listener.status) && activeListeners.containsKey(listener.listenerId)) {
-                try {
-                    // Pull messages from subscription
-                    List<Message> messages = listener.subscription.fetch(10, Duration.ofSeconds(1));
-                    
-                    for (Message message : messages) {
-                        handleIncomingMessage(
-                            listener.listenerId,
-                            listener.subject,
-                            listener.idFieldName,
-                            message,
-                            listener.messageHandler
-                        );
-                        
-                        // Acknowledge the message
-                        message.ack();
-                    }
-                    
-                } catch (Exception e) {
-                    if ("ACTIVE".equals(listener.status)) {
-                        logger.error("Error pulling messages for listener '{}'", listener.listenerId, e);
-                        try {
-                            Thread.sleep(1000); // Brief pause before retrying
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            logger.info("Message pulling stopped for listener '{}'", listener.listenerId);
-        });
+    // Private helper methods following Clean Code principles
+    
+    private String doStartListener(String subject, String idFieldName, 
+                                  Consumer<ListenerResult.MessageReceived> messageHandler) throws Exception {
+        ConsumerConfiguration config = configFactory.createDurableConsumerConfig(subject);
+        String consumerName = configFactory.generateDurableConsumerName(subject);
         
-        messageThread.setDaemon(true);
-        messageThread.start();
+        logger.info("Starting durable listener for subject '{}' with ID field '{}' and consumer '{}'", 
+                   subject, idFieldName, consumerName);
+        
+        JetStreamSubscription subscription = createSubscription(subject, idFieldName, config, messageHandler);
+        String listenerId = listenerRegistry.registerListener(subject, idFieldName, subscription, messageHandler);
+        
+        logger.info("Successfully started listener '{}' for subject '{}'", listenerId, subject);
+        return listenerId;
     }
     
-    /**
-     * Handle incoming NATS message.
-     */
-    private void handleIncomingMessage(String listenerId, String subject, String idFieldName, 
-                                     Message message, Consumer<ListenerResult.MessageReceived> messageHandler) {
+    private JetStreamSubscription createSubscription(String subject, String idFieldName,
+                                                    ConsumerConfiguration config,
+                                                    Consumer<ListenerResult.MessageReceived> messageHandler) throws Exception {
+        Dispatcher dispatcher = natsConnection.createDispatcher();
+        
+        MessageHandler natsMessageHandler = message -> {
+            try {
+                messageProcessor.processMessage("temp-id", subject, idFieldName, message, messageHandler);
+            } catch (Exception e) {
+                logger.error("Message processing failed for subject '{}'", subject, e);
+                // Don't ack on error - let NATS retry
+            }
+        };
+        
+        return jetStream.subscribe(
+            subject,
+            dispatcher,
+            natsMessageHandler,
+            false, // manual ack
+            PushSubscribeOptions.builder().configuration(config).build()
+        );
+    }
+    
+    private void doStopListener(String listenerId) {
+        ListenerRegistry.ListenerInfo listener = listenerRegistry.unregisterListener(listenerId);
+        
+        if (listener != null) {
+            unsubscribeGracefully(listener.subscription());
+            logger.info("Successfully stopped listener '{}' for subject '{}'", 
+                       listenerId, listener.subject());
+        } else {
+            logger.warn("Listener '{}' not found or already stopped", listenerId);
+        }
+    }
+    
+    private void stopListenersGracefully(List<String> listenerIds) {
+        for (String listenerId : listenerIds) {
+            try {
+                doStopListener(listenerId);
+            } catch (Exception e) {
+                logger.error("Error stopping listener '{}'", listenerId, e);
+                // Continue with other listeners
+            }
+        }
+    }
+    
+    private void unsubscribeGracefully(JetStreamSubscription subscription) {
         try {
-            String jsonPayload = new String(message.getData());
-            String extractedId = jsonIdExtractor.extractId(jsonPayload, idFieldName);
-            
-            // Update listener statistics
-            ActiveListener listener = activeListeners.get(listenerId);
-            if (listener != null) {
-                listener.messagesReceived++;
-                listener.lastMessageTime = Instant.now();
-            }
-            
-            // Create result
-            ListenerResult.MessageReceived result = new ListenerResult.MessageReceived(
-                subject,
-                generateMessageId(message),
-                extractedId,
-                jsonPayload,
-                message.metaData().streamSequence()
-            );
-            
-            logger.debug("Received message on subject '{}' with extracted ID: '{}'", subject, extractedId);
-            
-            // Call the message handler
-            messageHandler.accept(result);
-            
+            subscription.unsubscribe();
         } catch (Exception e) {
-            logger.error("Error handling message for listener '{}'", listenerId, e);
+            logger.warn("Error during unsubscription", e);
         }
     }
     
-    /**
-     * Generate a message ID from the NATS message.
-     */
-    private String generateMessageId(Message message) {
-        if (message.getHeaders() != null && message.getHeaders().containsKey("Nats-Msg-Id")) {
-            return message.getHeaders().getFirst("Nats-Msg-Id");
-        }
-        return "msg-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 8);
+    // Input validation methods
+    
+    private void validateInputs(String subject, String idFieldName, Consumer<ListenerResult.MessageReceived> messageHandler) {
+        validateSubject(subject);
+        validateIdFieldName(idFieldName);
+        validateMessageHandler(messageHandler);
     }
     
-    /**
-     * Internal class to track active listener information.
-     */
-    private static class ActiveListener {
-        final String listenerId;
-        final String subject;
-        final String idFieldName;
-        final JetStreamSubscription subscription;
-        final Consumer<ListenerResult.MessageReceived> messageHandler;
-        final Instant startTime;
-        
-        volatile String status = "ACTIVE";
-        volatile long messagesReceived = 0;
-        volatile Instant lastMessageTime;
-        
-        ActiveListener(String listenerId, String subject, String idFieldName, 
-                      JetStreamSubscription subscription, Consumer<ListenerResult.MessageReceived> messageHandler,
-                      Instant startTime) {
-            this.listenerId = listenerId;
-            this.subject = subject;
-            this.idFieldName = idFieldName;
-            this.subscription = subscription;
-            this.messageHandler = messageHandler;
-            this.startTime = startTime;
+    private void validateSubject(String subject) {
+        if (subject == null || subject.trim().isEmpty()) {
+            throw new IllegalArgumentException("Subject cannot be null or empty");
+        }
+    }
+    
+    private void validateIdFieldName(String idFieldName) {
+        if (idFieldName == null || idFieldName.trim().isEmpty()) {
+            throw new IllegalArgumentException("ID field name cannot be null or empty");
+        }
+    }
+    
+    private void validateMessageHandler(Consumer<ListenerResult.MessageReceived> messageHandler) {
+        if (messageHandler == null) {
+            throw new IllegalArgumentException("Message handler cannot be null");
+        }
+    }
+    
+    private void validateListenerId(String listenerId) {
+        if (listenerId == null || listenerId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Listener ID cannot be null or empty");
+        }
+    }
+    
+    // Custom exceptions for better error handling
+    
+    public static class ListenerStartupException extends RuntimeException {
+        public ListenerStartupException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+    
+    public static class ListenerStopException extends RuntimeException {
+        public ListenerStopException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 }
