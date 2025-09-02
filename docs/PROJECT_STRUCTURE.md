@@ -1,7 +1,7 @@
 # NATS Client Project Structure Documentation
 
 ## Overview
-This document provides a comprehensive guide to the project structure, explaining the organization of packages, classes, and their responsibilities within the NATS Client application.
+This document provides a comprehensive guide to the project structure, explaining the organization of packages, classes, and their responsibilities within the NATS Client application following Clean Code + SOLID principles.
 
 ---
 
@@ -26,7 +26,7 @@ nats-client/
 
 ---
 
-## Main Source Code Structure
+## Main Source Code Structure (Clean Architecture)
 
 ### Package Organization
 ```
@@ -35,17 +35,18 @@ com.example.natsclient/
 ├── controller/                    # REST API controllers
 ├── entity/                        # JPA entities
 ├── exception/                     # Custom exceptions
-├── metrics/                       # Metrics collection
 ├── model/                         # Data models and DTOs
 ├── repository/                    # Data access layer
-├── service/                       # Business logic layer
+├── service/                       # Business logic layer (Clean + SOLID)
+│   ├── config/                    # Configuration factories (SRP)
+│   ├── handler/                   # Message processors (SRP)
+│   ├── impl/                      # Service implementations
+│   ├── registry/                  # State management (SRP)
 │   ├── contract/                  # Service interfaces
 │   ├── event/                     # Event models
 │   ├── factory/                   # Factory classes
-│   ├── impl/                      # Service implementations
 │   ├── listener/                  # Listener management
 │   ├── observer/                  # Observer pattern implementations
-│   ├── startup/                   # Application startup services
 │   ├── strategy/                  # Strategy pattern implementations
 │   └── validator/                 # Input validation
 ├── util/                          # Utility classes
@@ -62,7 +63,6 @@ com.example.natsclient/
 ```
 config/
 ├── InfoProperties.java            # Application info properties
-├── ListenerRecoveryProperties.java # Listener recovery configuration
 ├── NatsConfig.java                # Main NATS configuration
 ├── NatsProperties.java            # NATS connection properties
 ├── ObserverConfiguration.java     # Observer pattern setup
@@ -71,7 +71,7 @@ config/
 
 **Key Classes:**
 - **NatsConfig**: Primary NATS connection and JetStream configuration
-- **ListenerRecoveryProperties**: Distributed recovery settings
+- **NatsProperties**: Connection settings and timeouts
 
 ### 2. Controller Package (`controller/`)
 **Purpose**: REST API endpoint definitions
@@ -94,13 +94,11 @@ controller/
 
 ```
 entity/
-├── NatsRequestLog.java            # Main request tracking entity
-└── ListenerRecoveryLock.java      # Distributed locking entity
+└── NatsRequestLog.java            # Main request tracking entity
 ```
 
 **Entity Details:**
 - **NatsRequestLog**: Stores request lifecycle information
-- **ListenerRecoveryLock**: Manages distributed coordination
 
 ### 4. Exception Package (`exception/`)
 **Purpose**: Custom exception hierarchy and error handling
@@ -114,33 +112,62 @@ exception/
 └── PayloadProcessingException.java # Payload handling exceptions
 ```
 
-### 5. Service Layer Architecture
+### 5. Clean Code Service Layer Architecture
 
-#### Service Contracts (`service/contract/`)
-**Purpose**: Define service interfaces and contracts
+#### Configuration Services (`service/config/`) - **SRP Implementation**
+**Purpose**: Factory for creating NATS consumer configurations
 
 ```
-service/contract/
-├── RequestTrackingContext.java    # Context for tracking operations
-├── RequestTrackingStrategy.java   # Strategy interface
-└── ResponseListenerManager.java   # Listener management interface
+service/config/
+└── ConsumerConfigurationFactory.java    # Durable consumer config factory
 ```
+
+**Responsibilities:**
+- Creates durable consumer configurations for load balancing
+- Generates unique consumer names per subject
+- Configures delivery policies and acknowledgment settings
+
+#### Message Handling (`service/handler/`) - **SRP Implementation**
+**Purpose**: Message processing and transformation
+
+```
+service/handler/
+└── MessageProcessor.java               # Message transformation and ACK
+```
+
+**Responsibilities:**
+- Processes incoming NATS messages
+- Handles message acknowledgment
+- Manages error scenarios during processing
+
+#### Service Registry (`service/registry/`) - **SRP Implementation**
+**Purpose**: Centralized listener lifecycle management
+
+```
+service/registry/
+└── ListenerRegistry.java               # Listener state management
+```
+
+**Responsibilities:**
+- Registers and unregisters listeners
+- Tracks listener status and metadata
+- Provides thread-safe operations using concurrent collections
+- Manages immutable listener records
 
 #### Service Implementations (`service/impl/`)
-**Purpose**: Core business logic implementations
+**Purpose**: Core business logic implementations following DIP
 
 ```
 service/impl/
-├── AbstractNatsMessageProcessor.java    # Base message processor
+├── NatsListenerServiceImpl.java        # Clean listener orchestration
 ├── EnhancedNatsMessageService.java      # Enhanced NATS operations
-├── NatsListenerServiceImpl.java        # Listener service implementation
-├── NatsPublishProcessor.java           # Message publishing logic
-└── RequestLogServiceImpl.java          # Request logging service
+├── RequestLogServiceImpl.java          # Request logging service
+└── (other existing implementations)
 ```
 
 **Key Components:**
+- **NatsListenerServiceImpl**: Orchestrates dependencies via constructor injection
 - **EnhancedNatsMessageService**: Advanced NATS operations with tracking
-- **AbstractNatsMessageProcessor**: Template for message processing
 - **RequestLogServiceImpl**: Database operations for request tracking
 
 #### Service Orchestration
@@ -150,13 +177,13 @@ service/impl/
 service/
 ├── NatsOrchestrationService.java        # Main orchestration service
 ├── NatsMessageService.java             # Core NATS message service
-├── NatsListenerService.java            # Listener management service
+├── NatsListenerService.java            # Listener management interface
 ├── PayloadProcessor.java               # Payload processing service
-├── RequestLogService.java              # Request logging service
+├── RequestLogService.java              # Request logging interface
 └── RequestResponseCorrelationService.java # Response correlation
 ```
 
-#### Specialized Services
+#### Specialized Services (Legacy Components)
 
 **Event Management (`service/event/`)**
 ```
@@ -186,13 +213,6 @@ service/observer/
     └── MetricsEventObserver.java        # Metrics collection observer
 ```
 
-**Startup Services (`service/startup/`)**
-```
-service/startup/
-├── DistributedLockService.java         # Distributed coordination
-└── ListenerRecoveryService.java        # Startup recovery logic
-```
-
 **Strategy Pattern (`service/strategy/`)**
 ```
 service/strategy/
@@ -210,13 +230,11 @@ service/validator/
 
 ```
 repository/
-├── NatsRequestLogRepository.java       # Request log data access
-└── ListenerRecoveryLockRepository.java # Lock data access
+└── NatsRequestLogRepository.java       # Request log data access
 ```
 
 **Custom Queries:**
 - Status-based request queries
-- Distributed lock operations
 - Cleanup and maintenance queries
 
 ### 7. Model Package (`model/`)
@@ -241,113 +259,11 @@ util/
 
 ---
 
-## Test Structure
-
-### Test Package Organization
-```
-src/test/java/com/example/natsclient/
-├── config/
-│   ├── ConfigurationPropertiesTest.java
-│   └── TestNatsConfig.java
-├── entity/
-│   └── NatsRequestLogTest.java
-├── model/
-│   └── NatsCredentialsTest.java
-├── service/
-│   ├── factory/
-│   │   └── MetricsFactoryTestSimple.java
-│   ├── impl/
-│   │   └── RequestLogServiceImplTest.java
-│   ├── startup/
-│   │   ├── DistributedLockServiceTest.java
-│   │   └── ListenerRecoveryServiceTest.java
-│   ├── validator/
-│   │   └── RequestValidatorTest.java
-│   └── NatsOrchestrationServiceTest.java
-└── util/
-    └── NatsMessageHeadersTest.java
-```
-
-**Test Categories:**
-- **Unit Tests**: Individual component testing
-- **Integration Tests**: Component interaction testing
-- **Configuration Tests**: Spring configuration validation
-- **Repository Tests**: Database operation testing
-
----
-
-## Key Design Patterns Used
-
-### 1. **Dependency Injection Pattern**
-- Spring Framework's IoC container
-- Constructor-based injection preferred
-- Interface-based programming
-
-### 2. **Repository Pattern**
-- Clean separation of data access logic
-- JPA/Hibernate implementation
-- Custom query methods
-
-### 3. **Strategy Pattern**
-- `RequestTrackingStrategy` for different tracking approaches
-- `PayloadIdTrackingStrategy` for correlation logic
-- Pluggable algorithms
-
-### 4. **Observer Pattern**
-- Event-driven architecture
-- `NatsEventPublisher` and observers
-- Cross-cutting concerns handling
-
-### 5. **Template Method Pattern**
-- `AbstractNatsMessageProcessor` base class
-- Common processing workflow
-- Customizable processing steps
-
-### 6. **Factory Pattern**
-- `TrackingStrategyFactory` for strategy creation
-- `MetricsFactory` for metrics components
-- Centralized object creation
-
----
-
 ## Configuration Files Structure
 
 ### Application Configuration
 ```
 src/main/resources/
-├── application.yml                   # Configuration
+├── application.yml                   # Base configuration
 └── schema.sql                        # Database schema
-```
-
-### Configuration Hierarchy
-1. **application.yml**: Base configuration
-2. **Profile-specific**: Environment overrides
-3. **Environment variables**: Runtime configuration
-4. **Command-line args**: Deployment-time overrides
-
----
-
-## Build Configuration
-
-### Maven Structure
-```
-pom.xml
-├── Properties
-│   ├── Java version (17)
-│   ├── Spring Boot version (3.5.0)
-│   └── Dependency versions
-├── Dependencies
-│   ├── Spring Boot starters
-│   ├── NATS Java client
-│   ├── Database drivers
-│   ├── Testing framework
-│   └── Documentation tools
-├── Build Plugins
-│   ├── Spring Boot Maven Plugin
-│   ├── Surefire (testing)
-│   └── Failsafe (integration tests)
-└── Profiles
-    ├── Local development
-    ├── Testing
-    └── Production
 ```
