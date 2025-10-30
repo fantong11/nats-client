@@ -3,7 +3,7 @@ package com.example.natsclient.service.impl;
 import com.example.natsclient.model.ListenerResult;
 import com.example.natsclient.service.NatsListenerService;
 import com.example.natsclient.service.config.ConsumerConfigurationFactory;
-import com.example.natsclient.service.handler.MessageProcessor;
+import com.example.natsclient.service.fetcher.PullMessageFetcher;
 import com.example.natsclient.service.registry.ListenerRegistry;
 import io.nats.client.*;
 import io.nats.client.api.ConsumerConfiguration;
@@ -11,13 +11,24 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PreDestroy;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
  * Clean Code implementation of NatsListenerService following SOLID principles.
- * 
+ *
+ * Pull Consumer mode implementation:
+ * - Client actively pulls messages, providing better flow control
+ * - Uses dedicated thread pool to manage pull tasks
+ * - Supports graceful shutdown and resource cleanup
+ *
  * - SRP: Delegates specific responsibilities to specialized components
  * - OCP: Extensible through dependency injection and configuration
  * - LSP: Properly implements the NatsListenerService interface
@@ -26,27 +37,37 @@ import java.util.function.Consumer;
  */
 @Service
 public class NatsListenerServiceImpl implements NatsListenerService {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(NatsListenerServiceImpl.class);
-    
-    private final Connection natsConnection;
+
     private final JetStream jetStream;
     private final ConsumerConfigurationFactory configFactory;
-    private final MessageProcessor messageProcessor;
+    private final PullMessageFetcher pullMessageFetcher;
     private final ListenerRegistry listenerRegistry;
-    
-    public NatsListenerServiceImpl(Connection natsConnection, 
-                                  JetStream jetStream,
+
+    // Dedicated thread pool for Pull Consumer
+    private final ExecutorService fetcherExecutorService;
+
+    public NatsListenerServiceImpl(JetStream jetStream,
                                   ConsumerConfigurationFactory configFactory,
-                                  MessageProcessor messageProcessor,
+                                  PullMessageFetcher pullMessageFetcher,
                                   ListenerRegistry listenerRegistry) {
-        this.natsConnection = natsConnection;
         this.jetStream = jetStream;
         this.configFactory = configFactory;
-        this.messageProcessor = messageProcessor;
+        this.pullMessageFetcher = pullMessageFetcher;
         this.listenerRegistry = listenerRegistry;
+
+        // Create thread pool for message fetching
+        this.fetcherExecutorService = Executors.newCachedThreadPool(r -> {
+            Thread thread = new Thread(r);
+            thread.setName("nats-pull-fetcher-" + System.currentTimeMillis());
+            thread.setDaemon(true);
+            return thread;
+        });
+
+        logger.info("NatsListenerService initialized with Pull Consumer mode");
     }
-    
+
     @Override
     public CompletableFuture<String> startListener(String subject, String idFieldName, 
                                                   Consumer<ListenerResult.MessageReceived> messageHandler) {
@@ -102,51 +123,74 @@ public class NatsListenerServiceImpl implements NatsListenerService {
     }
     
     // Private helper methods following Clean Code principles
-    
-    private String doStartListener(String subject, String idFieldName, 
+
+    /**
+     * Core logic for starting a Pull Consumer listener.
+     */
+    private String doStartListener(String subject, String idFieldName,
                                   Consumer<ListenerResult.MessageReceived> messageHandler) throws Exception {
-        ConsumerConfiguration config = configFactory.createDurableConsumerConfig(subject);
+        // 1. Create Pull Consumer configuration
+        ConsumerConfiguration config = configFactory.createPullConsumerConfig(subject);
         String consumerName = configFactory.generateDurableConsumerName(subject);
-        
-        logger.info("Starting durable listener for subject '{}' with ID field '{}' and consumer '{}'", 
+
+        logger.info("Starting Pull Consumer listener for subject '{}' with ID field '{}' and consumer '{}'",
                    subject, idFieldName, consumerName);
-        
-        JetStreamSubscription subscription = createSubscription(subject, idFieldName, config, messageHandler);
-        String listenerId = listenerRegistry.registerListener(subject, idFieldName, subscription, messageHandler);
-        
-        logger.info("Successfully started listener '{}' for subject '{}'", listenerId, subject);
+
+        // 2. Create Pull subscription
+        JetStreamSubscription subscription = createPullSubscription(subject, config);
+
+        // 3. Create running flag (to control the pull loop)
+        AtomicBoolean running = new AtomicBoolean(true);
+
+        // 4. Start message fetching loop in a separate thread
+        String tempListenerId = "listener-" + System.currentTimeMillis();
+        Future<?> fetcherFuture = fetcherExecutorService.submit(() -> {
+            pullMessageFetcher.startFetchingLoop(
+                tempListenerId, subject, idFieldName, subscription, messageHandler, running
+            );
+        });
+
+        // 5. Register the listener
+        String listenerId = listenerRegistry.registerListener(
+            subject, idFieldName, subscription, messageHandler, fetcherFuture, running
+        );
+
+        logger.info("Successfully started Pull Consumer listener '{}' for subject '{}'", listenerId, subject);
         return listenerId;
     }
-    
-    private JetStreamSubscription createSubscription(String subject, String idFieldName,
-                                                    ConsumerConfiguration config,
-                                                    Consumer<ListenerResult.MessageReceived> messageHandler) throws Exception {
-        Dispatcher dispatcher = natsConnection.createDispatcher();
-        
-        MessageHandler natsMessageHandler = message -> {
-            try {
-                messageProcessor.processMessage("temp-id", subject, idFieldName, message, messageHandler);
-            } catch (Exception e) {
-                logger.error("Message processing failed for subject '{}'", subject, e);
-                // Don't ack on error - let NATS retry
-            }
-        };
-        
-        return jetStream.subscribe(
-            subject,
-            dispatcher,
-            natsMessageHandler,
-            false, // manual ack
-            PushSubscribeOptions.builder().configuration(config).build()
-        );
+
+    /**
+     * Creates a Pull Consumer subscription.
+     * No Dispatcher needed, directly uses PullSubscribeOptions.
+     */
+    private JetStreamSubscription createPullSubscription(String subject, ConsumerConfiguration config) throws Exception {
+        PullSubscribeOptions pullOptions = PullSubscribeOptions.builder()
+            .configuration(config)
+            .build();
+
+        return jetStream.subscribe(subject, pullOptions);
     }
     
+    /**
+     * Stops a Pull Consumer listener.
+     * Gracefully stops the fetcher thread and cleans up resources.
+     */
     private void doStopListener(String listenerId) {
         ListenerRegistry.ListenerInfo listener = listenerRegistry.unregisterListener(listenerId);
-        
+
         if (listener != null) {
+            // 1. Set running flag to false to stop the pull loop
+            listener.running().set(false);
+
+            // 2. Cancel the fetcher task
+            if (listener.fetcherFuture() != null) {
+                listener.fetcherFuture().cancel(true);
+            }
+
+            // 3. Unsubscribe
             unsubscribeGracefully(listener.subscription());
-            logger.info("Successfully stopped listener '{}' for subject '{}'", 
+
+            logger.info("Successfully stopped Pull Consumer listener '{}' for subject '{}'",
                        listenerId, listener.subject());
         } else {
             logger.warn("Listener '{}' not found or already stopped", listenerId);
@@ -203,15 +247,44 @@ public class NatsListenerServiceImpl implements NatsListenerService {
             throw new IllegalArgumentException("Listener ID cannot be null or empty");
         }
     }
-    
+
+    /**
+     * Gracefully shuts down the thread pool when application closes.
+     */
+    @PreDestroy
+    public void shutdown() {
+        logger.info("Shutting down NatsListenerService and fetcher thread pool");
+
+        // Stop all listeners first
+        try {
+            stopAllListeners().join();
+        } catch (Exception e) {
+            logger.error("Error stopping listeners during shutdown", e);
+        }
+
+        // Shutdown thread pool
+        fetcherExecutorService.shutdown();
+        try {
+            if (!fetcherExecutorService.awaitTermination(10, TimeUnit.SECONDS)) {
+                logger.warn("Fetcher thread pool did not terminate in time, forcing shutdown");
+                fetcherExecutorService.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            fetcherExecutorService.shutdownNow();
+        }
+
+        logger.info("NatsListenerService shutdown complete");
+    }
+
     // Custom exceptions for better error handling
-    
+
     public static class ListenerStartupException extends RuntimeException {
         public ListenerStartupException(String message, Throwable cause) {
             super(message, cause);
         }
     }
-    
+
     public static class ListenerStopException extends RuntimeException {
         public ListenerStopException(String message, Throwable cause) {
             super(message, cause);

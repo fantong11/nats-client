@@ -63,11 +63,26 @@ nats:
     domain: ${NATS_JETSTREAM_DOMAIN:}
     prefix: ${NATS_JETSTREAM_PREFIX:$JS.API}
     default-timeout: ${NATS_JETSTREAM_DEFAULT_TIMEOUT:5000}
-    
+
     publish-ack:
       timeout: ${NATS_JETSTREAM_PUBLISH_TIMEOUT:5000}
       wait-for-ack: ${NATS_JETSTREAM_WAIT_FOR_ACK:true}
-    
+
+    # Pull Consumer Configuration
+    pull-consumer:
+      # Batch size for each pull
+      batch-size: ${NATS_PULL_BATCH_SIZE:10}
+      # Maximum wait time for pulling (milliseconds)
+      max-wait: ${NATS_PULL_MAX_WAIT:1000}
+      # Poll interval (milliseconds)
+      poll-interval: ${NATS_PULL_POLL_INTERVAL:100}
+      # ACK timeout (milliseconds)
+      ack-timeout: ${NATS_PULL_ACK_TIMEOUT:30000}
+      # Maximum delivery attempts
+      max-deliver: ${NATS_PULL_MAX_DELIVER:3}
+      # Maximum unacknowledged messages
+      max-ack-pending: ${NATS_PULL_MAX_ACK_PENDING:1000}
+
     subscribe:
       ack-timeout: ${NATS_JETSTREAM_ACK_TIMEOUT:30000}
       max-deliver: ${NATS_JETSTREAM_MAX_DELIVER:3}

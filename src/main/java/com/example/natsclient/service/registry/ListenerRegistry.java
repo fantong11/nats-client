@@ -10,35 +10,46 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
  * Registry for managing active NATS listeners.
  * Follows Single Responsibility Principle - only responsible for listener lifecycle management.
+ *
+ * Supports Pull Consumer mode:
+ * - Manages fetcher threads and running state
+ * - Controls the start and stop of pull loops
  */
 @Component
 public class ListenerRegistry {
-    
+
     private final ConcurrentMap<String, ListenerInfo> activeListeners = new ConcurrentHashMap<>();
-    
+
     /**
-     * Registers a new listener.
-     * 
+     * Registers a Pull Consumer listener.
+     *
      * @param subject The subject name
      * @param idFieldName The ID field name
-     * @param subscription The JetStream subscription
-     * @param messageHandler The message handler
-     * @return The generated listener ID
+     * @param subscription JetStream subscription
+     * @param messageHandler Message handler
+     * @param fetcherFuture Future of the fetcher thread
+     * @param running Running flag to control the pull loop
+     * @return Generated listener ID
      */
-    public String registerListener(String subject, String idFieldName, 
+    public String registerListener(String subject, String idFieldName,
                                   JetStreamSubscription subscription,
-                                  Consumer<ListenerResult.MessageReceived> messageHandler) {
+                                  Consumer<ListenerResult.MessageReceived> messageHandler,
+                                  Future<?> fetcherFuture,
+                                  AtomicBoolean running) {
         String listenerId = generateListenerId();
-        
+
         ListenerInfo listenerInfo = new ListenerInfo(
-            listenerId, subject, idFieldName, subscription, messageHandler, Instant.now()
+            listenerId, subject, idFieldName, subscription, messageHandler,
+            fetcherFuture, running, Instant.now()
         );
-        
+
         activeListeners.put(listenerId, listenerInfo);
         return listenerId;
     }
@@ -112,7 +123,10 @@ public class ListenerRegistry {
     }
     
     /**
-     * Immutable record representing listener information.
+     * Immutable record representing Pull Consumer listener information.
+     *
+     * @param fetcherFuture Future of the fetcher thread, used to cancel the fetching task
+     * @param running Atomic boolean flag to control the pull loop execution
      */
     public record ListenerInfo(
         String listenerId,
@@ -120,23 +134,28 @@ public class ListenerRegistry {
         String idFieldName,
         JetStreamSubscription subscription,
         Consumer<ListenerResult.MessageReceived> messageHandler,
+        Future<?> fetcherFuture,
+        AtomicBoolean running,
         Instant startTime,
         String status
     ) {
         public ListenerInfo(String listenerId, String subject, String idFieldName,
                            JetStreamSubscription subscription,
                            Consumer<ListenerResult.MessageReceived> messageHandler,
+                           Future<?> fetcherFuture,
+                           AtomicBoolean running,
                            Instant startTime) {
-            this(listenerId, subject, idFieldName, subscription, messageHandler, startTime, "ACTIVE");
+            this(listenerId, subject, idFieldName, subscription, messageHandler,
+                 fetcherFuture, running, startTime, "ACTIVE");
         }
-        
+
         public boolean isActive() {
             return "ACTIVE".equals(status);
         }
-        
+
         public ListenerInfo markAsStopped() {
-            return new ListenerInfo(listenerId, subject, idFieldName, subscription, 
-                                  messageHandler, startTime, "STOPPED");
+            return new ListenerInfo(listenerId, subject, idFieldName, subscription,
+                                  messageHandler, fetcherFuture, running, startTime, "STOPPED");
         }
     }
 }
