@@ -38,6 +38,22 @@ public class ListenerRegistry {
      * @param running Running flag to control the pull loop
      * @return Generated listener ID
      */
+
+    /**
+     * Registers a listener with a pre-generated ID.
+     * Ensures ID consistency between fetcher and registry.
+     */
+    public void registerListenerWithId(String listenerId, String subject, String idFieldName,
+                                      JetStreamSubscription subscription,
+                                      Consumer<ListenerResult.MessageReceived> messageHandler,
+                                      Future<?> fetcherFuture,
+                                      AtomicBoolean running) {
+        ListenerInfo listenerInfo = new ListenerInfo(
+            listenerId, subject, idFieldName, subscription, messageHandler,
+            fetcherFuture, running, Instant.now()
+        );
+        activeListeners.put(listenerId, listenerInfo);
+    }
     public String registerListener(String subject, String idFieldName,
                                   JetStreamSubscription subscription,
                                   Consumer<ListenerResult.MessageReceived> messageHandler,
@@ -106,7 +122,7 @@ public class ListenerRegistry {
         return activeListeners.size();
     }
     
-    private String generateListenerId() {
+    public String generateListenerId() {
         return "listener-" + UUID.randomUUID().toString();
     }
     

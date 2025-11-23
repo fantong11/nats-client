@@ -143,15 +143,13 @@ public class NatsListenerServiceImpl implements NatsListenerService {
         AtomicBoolean running = new AtomicBoolean(true);
 
         // 4. Start message fetching loop in a separate thread
-        String tempListenerId = "listener-" + System.currentTimeMillis();
+        String listenerId = listenerRegistry.generateListenerId();
         Future<?> fetcherFuture = fetcherExecutorService.submit(() -> {
-            pullMessageFetcher.startFetchingLoop(
-                tempListenerId, subject, idFieldName, subscription, messageHandler, running
-            );
+            pullMessageFetcher.startFetchingLoop(listenerId, subject, idFieldName, subscription, messageHandler, running);
         });
 
         // 5. Register the listener
-        String listenerId = listenerRegistry.registerListener(
+        listenerRegistry.registerListenerWithId(listenerId,
             subject, idFieldName, subscription, messageHandler, fetcherFuture, running
         );
 
