@@ -87,7 +87,16 @@ nats:
       ack-timeout: ${NATS_JETSTREAM_ACK_TIMEOUT:30000}
       max-deliver: ${NATS_JETSTREAM_MAX_DELIVER:3}
       deliver-policy: ${NATS_JETSTREAM_DELIVER_POLICY:NEW}
-    
+
+  # New Pull Consumer Configuration (Refactored)
+  consumer:
+    batch-size: ${NATS_CONSUMER_BATCH_SIZE:10}
+    max-wait: ${NATS_CONSUMER_MAX_WAIT:1s}
+    poll-interval: ${NATS_CONSUMER_POLL_INTERVAL:100ms}
+    max-retries: ${NATS_CONSUMER_MAX_RETRIES:3}
+    backoff-initial: ${NATS_CONSUMER_BACKOFF_INITIAL:1s}
+    backoff-multiplier: ${NATS_CONSUMER_BACKOFF_MULTIPLIER:2.0}
+    backoff-max: ${NATS_CONSUMER_BACKOFF_MAX:30s}
 
 # OpenAPI/Swagger Configuration - 最簡配置
 springdoc:

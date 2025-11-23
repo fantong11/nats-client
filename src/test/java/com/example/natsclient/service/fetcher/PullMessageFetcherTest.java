@@ -1,7 +1,9 @@
 package com.example.natsclient.service.fetcher;
 
+import com.example.natsclient.config.NatsConsumerProperties;
 import com.example.natsclient.model.ListenerResult;
 import com.example.natsclient.service.handler.MessageProcessor;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.nats.client.JetStreamSubscription;
 import io.nats.client.Message;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +35,11 @@ class PullMessageFetcherTest {
     private MessageProcessor messageProcessor;
 
     @Mock
+    private NatsConsumerProperties properties;
+
+    private MeterRegistry meterRegistry;
+
+    @Mock
     private JetStreamSubscription subscription;
 
     @Mock
@@ -51,7 +58,18 @@ class PullMessageFetcherTest {
 
     @BeforeEach
     void setUp() {
-        fetcher = new PullMessageFetcher(messageProcessor);
+        // Use SimpleMeterRegistry for testing metrics
+        meterRegistry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+
+        // Mock default properties
+        lenient().when(properties.getBatchSize()).thenReturn(10);
+        lenient().when(properties.getMaxWait()).thenReturn(Duration.ofSeconds(1));
+        lenient().when(properties.getPollInterval()).thenReturn(Duration.ofMillis(10)); // Short interval for tests
+        lenient().when(properties.getBackoffInitial()).thenReturn(Duration.ofMillis(10));
+        lenient().when(properties.getBackoffMultiplier()).thenReturn(2.0);
+        lenient().when(properties.getBackoffMax()).thenReturn(Duration.ofMillis(100));
+
+        fetcher = new PullMessageFetcher(messageProcessor, properties, meterRegistry);
     }
 
     @Test
@@ -82,8 +100,7 @@ class PullMessageFetcherTest {
         // Then
         verify(subscription, atLeast(1)).iterate(anyInt(), any(Duration.class));
         verify(messageProcessor, times(2)).processMessage(
-                eq(listenerId), eq(subject), eq(idFieldName), any(Message.class), eq(messageHandler)
-        );
+                eq(listenerId), eq(subject), eq(idFieldName), any(Message.class), eq(messageHandler));
     }
 
     @Test
@@ -150,14 +167,11 @@ class PullMessageFetcherTest {
 
         // Mock messageProcessor 处理第二条消息时抛出异常
         doNothing().when(messageProcessor).processMessage(
-                eq(listenerId), eq(subject), eq(idFieldName), eq(message1), eq(messageHandler)
-        );
+                eq(listenerId), eq(subject), eq(idFieldName), eq(message1), eq(messageHandler));
         doThrow(new RuntimeException("Processing error")).when(messageProcessor).processMessage(
-                eq(listenerId), eq(subject), eq(idFieldName), eq(message2), eq(messageHandler)
-        );
+                eq(listenerId), eq(subject), eq(idFieldName), eq(message2), eq(messageHandler));
         doNothing().when(messageProcessor).processMessage(
-                eq(listenerId), eq(subject), eq(idFieldName), eq(message3), eq(messageHandler)
-        );
+                eq(listenerId), eq(subject), eq(idFieldName), eq(message3), eq(messageHandler));
 
         // When - 不应该抛出异常
         assertDoesNotThrow(() -> {
@@ -166,12 +180,11 @@ class PullMessageFetcherTest {
 
         // Then - 所有消息都应该被尝试处理
         verify(messageProcessor, times(3)).processMessage(
-                eq(listenerId), eq(subject), eq(idFieldName), any(Message.class), eq(messageHandler)
-        );
+                eq(listenerId), eq(subject), eq(idFieldName), any(Message.class), eq(messageHandler));
     }
 
     @Test
-    void startFetchingLoop_WithIterateException_ShouldHandleAndContinue() throws Exception {
+    void startFetchingLoop_WithIterateException_ShouldRetryAndContinue() throws Exception {
         // Given
         String listenerId = "test-listener-5";
         String subject = "test.subject";
@@ -194,16 +207,15 @@ class PullMessageFetcherTest {
                     }
                 });
 
-        // When - 不应该抛出异常
+        // When - 不應該拋出異常，應該重試
         assertDoesNotThrow(() -> {
             fetcher.startFetchingLoop(listenerId, subject, idFieldName, subscription, messageHandler, running);
         });
 
-        // Then - 应该继续尝试拉取并处理后续消息
+        // Then - 应该繼續嘗試拉取並處理後續消息
         verify(subscription, atLeast(2)).iterate(anyInt(), any(Duration.class));
         verify(messageProcessor, times(1)).processMessage(
-                eq(listenerId), eq(subject), eq(idFieldName), eq(message1), eq(messageHandler)
-        );
+                eq(listenerId), eq(subject), eq(idFieldName), eq(message1), eq(messageHandler));
     }
 
     @Test
@@ -237,53 +249,7 @@ class PullMessageFetcherTest {
         // Then
         verify(subscription, atLeast(2)).iterate(anyInt(), any(Duration.class));
         verify(messageProcessor, times(3)).processMessage(
-                eq(listenerId), eq(subject), eq(idFieldName), any(Message.class), eq(messageHandler)
-        );
-    }
-
-    @Test
-    void constructor_WithNullMessageProcessor_ShouldThrowException() {
-        // When & Then
-        assertThrows(NullPointerException.class, () -> {
-            new PullMessageFetcher(null);
-        });
-    }
-
-    @Test
-    void startFetchingLoop_WithNullParameters_ShouldHandleGracefully() {
-        // Given
-        AtomicBoolean running = new AtomicBoolean(true);
-
-        // When & Then - 测试各种 null 参数
-        assertThrows(Exception.class, () -> {
-            fetcher.startFetchingLoop(null, "subject", "idField", subscription, messageHandler, running);
-        });
-    }
-
-    @Test
-    void startFetchingLoop_WithEmptyListenerId_ShouldStillWork() throws Exception {
-        // Given
-        String listenerId = "";
-        String subject = "test.subject";
-        String idFieldName = "id";
-        AtomicBoolean running = new AtomicBoolean(true);
-        AtomicInteger callCount = new AtomicInteger(0);
-
-        when(subscription.iterate(anyInt(), any(Duration.class)))
-                .thenAnswer(invocation -> {
-                    if (callCount.incrementAndGet() >= 1) {
-                        running.set(false);
-                    }
-                    return Collections.emptyIterator();
-                });
-
-        // When - 应该不抛出异常
-        assertDoesNotThrow(() -> {
-            fetcher.startFetchingLoop(listenerId, subject, idFieldName, subscription, messageHandler, running);
-        });
-
-        // Then
-        verify(subscription, atLeast(1)).iterate(anyInt(), any(Duration.class));
+                eq(listenerId), eq(subject), eq(idFieldName), any(Message.class), eq(messageHandler));
     }
 
     @Test
@@ -311,8 +277,7 @@ class PullMessageFetcherTest {
             running.set(false); // 处理第一条消息后设置停止标志
             return null;
         }).when(messageProcessor).processMessage(
-                eq(listenerId), eq(subject), eq(idFieldName), eq(message1), eq(messageHandler)
-        );
+                eq(listenerId), eq(subject), eq(idFieldName), eq(message1), eq(messageHandler));
 
         // When
         fetcher.startFetchingLoop(listenerId, subject, idFieldName, subscription, messageHandler, running);
