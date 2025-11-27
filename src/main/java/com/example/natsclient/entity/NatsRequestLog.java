@@ -60,7 +60,6 @@ public class NatsRequestLog {
     @Column(name = "TIMEOUT_DURATION")
     private Long timeoutDuration;
 
-
     @Column(name = "CREATED_BY")
     private String createdBy;
 
@@ -74,13 +73,16 @@ public class NatsRequestLog {
     @UpdateTimestamp
     @Column(name = "UPDATED_DATE")
     private LocalDateTime updatedDate;
-    
+
     // Fields for response tracking and listener recovery after restart
     @Column(name = "RESPONSE_SUBJECT")
     private String responseSubject;
-    
-    @Column(name = "RESPONSE_ID_FIELD") 
+
+    @Column(name = "RESPONSE_ID_FIELD")
     private String responseIdField;
+
+    @Column(name = "WEBHOOK_URL")
+    private String webhookUrl;
 
     public enum RequestStatus {
         PENDING, SUCCESS, FAILED, TIMEOUT, ERROR

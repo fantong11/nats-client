@@ -28,76 +28,11 @@ public class RequestResponseCorrelationService {
     private NatsRequestLogRepository requestLogRepository;
 
     @Autowired
-    private PayloadProcessor payloadProcessor;
+    private WebhookService webhookService;
 
     /**
-     * Process a received response message and correlate it with the original
-     * request using correlationId.
-     * 
-     * @param responseMessage The received response message
-     * @param expectedSubject The subject that sent the original request (optional)
-     * @return true if correlation was successful, false otherwise
-     */
-    public boolean processResponse(ListenerResult.MessageReceived responseMessage, String responseIdField) {
-        // Extract ID from the response JSON payload using the specified field
-        String responseId = payloadProcessor.extractIdFromJson(responseMessage.jsonPayload(), responseIdField);
-
-        if (responseId == null || responseId.trim().isEmpty()) {
-            logger.warn("No ID found in response message field '{}' on subject '{}'",
-                    responseIdField, responseMessage.subject());
-            return false;
-        }
-
-        try {
-            // Find requests with PENDING status that contain the same ID in their payload
-            java.util.List<NatsRequestLog> candidateRequests = requestLogRepository
-                    .findByStatus(NatsRequestLog.RequestStatus.PENDING);
-
-            NatsRequestLog matchingRequest = null;
-            for (NatsRequestLog candidateRequest : candidateRequests) {
-                // Extract ID from request payload using the same field name
-                String requestId = payloadProcessor.extractIdFromJson(candidateRequest.getRequestPayload(),
-                        responseIdField);
-
-                if (responseId.equals(requestId)) {
-                    matchingRequest = candidateRequest;
-                    logger.debug("Found matching request - RequestId: '{}', PayloadId: '{}'",
-                            candidateRequest.getRequestId(), requestId);
-                    break;
-                }
-            }
-
-            if (matchingRequest == null) {
-                logger.warn("No matching PENDING request found for response ID '{}' (field: '{}') from subject '{}'",
-                        responseId, responseIdField, responseMessage.subject());
-                return false;
-            }
-
-            // Update the request log with response information
-            matchingRequest.setResponsePayload(responseMessage.jsonPayload());
-            matchingRequest.setStatus(NatsRequestLog.RequestStatus.SUCCESS);
-            matchingRequest.setResponseTimestamp(LocalDateTime.now());
-            matchingRequest.setUpdatedBy("RESPONSE_CORRELATION");
-
-            requestLogRepository.save(matchingRequest);
-
-            logger.info(
-                    "Successfully correlated response for payload ID '{}' - RequestId: '{}', Subject: '{}', Response from: '{}'",
-                    responseId, matchingRequest.getRequestId(), matchingRequest.getSubject(),
-                    responseMessage.subject());
-
-            return true;
-
-        } catch (Exception e) {
-            logger.error("Error correlating response for ID '{}' (field: '{}') from subject '{}'",
-                    responseId, responseIdField, responseMessage.subject(), e);
-            return false;
-        }
-    }
-
-    /**
-     * Process a response and also update with custom status.
-     * 
+     * Process a response message and update the corresponding request log.
+     *
      * @param responseMessage The received response message
      * @param expectedSubject The subject that sent the original request
      * @param customStatus    Custom status to set (e.g., PARTIAL_SUCCESS, FAILED)
@@ -135,6 +70,16 @@ public class RequestResponseCorrelationService {
             logger.info(
                     "Successfully correlated response for request ID '{}' with status '{}' - Subject: '{}', Response from: '{}'",
                     extractedId, customStatus, requestLog.getSubject(), responseMessage.subject());
+
+            // Send webhook notification if URL is present
+            if (requestLog.getWebhookUrl() != null && !requestLog.getWebhookUrl().isEmpty()) {
+                try {
+                    webhookService.sendWebhook(requestLog.getWebhookUrl(), requestLog);
+                    logger.info("Webhook notification triggered for request ID: {}", requestLog.getRequestId());
+                } catch (Exception e) {
+                    logger.error("Failed to trigger webhook for request ID: {}", requestLog.getRequestId(), e);
+                }
+            }
 
             return true;
 
@@ -208,5 +153,11 @@ public class RequestResponseCorrelationService {
             logger.error("Error marking request '{}' as timeout", requestId, e);
             return false;
         }
+    }
+
+    // Added processResponse method to match the one expected by tests and other
+    // services
+    public boolean processResponse(ListenerResult.MessageReceived responseMessage, String expectedSubject) {
+        return processResponseWithStatus(responseMessage, expectedSubject, NatsRequestLog.RequestStatus.SUCCESS);
     }
 }

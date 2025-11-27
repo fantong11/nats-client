@@ -28,70 +28,67 @@ public class NatsOrchestrationService {
     private final NatsRequestLogRepository requestLogRepository;
     private final RequestTrackingStrategy trackingStrategy;
 
-
     public CompletableFuture<String> publishMessageWithTracking(NatsPublishRequest request) {
         log.info("Publishing NATS message - Subject: {}", request.getSubject());
 
         try {
             validatePublishRequest(request);
-            
+
             String requestId = generateRequestId();
             RequestTrackingContext context = trackingStrategy.processRequest(request, requestId);
-            
+
             return natsMessageService.publishMessage(requestId, request.getSubject(), context.getPublishPayload())
-                .thenApply(publishResult -> handlePublishResult(publishResult, context));
+                    .thenApply(publishResult -> handlePublishResult(publishResult, context));
 
         } catch (Exception e) {
             return handlePublishError(e, request);
         }
     }
-    
+
     private String handlePublishResult(PublishResult publishResult, RequestTrackingContext context) {
         if (publishResult instanceof PublishResult.Success success) {
-            log.info("Message published successfully - RequestID: {}, Sequence: {}", 
+            log.info("Message published successfully - RequestID: {}, Sequence: {}",
                     context.getRequestId(), success.sequence());
             trackingStrategy.handlePublishSuccess(context);
             return context.getRequestId();
-        } 
-        
+        }
+
         if (publishResult instanceof PublishResult.Failure failure) {
-            log.error("Message publish failed - RequestID: {}, Error: {}", 
+            log.error("Message publish failed - RequestID: {}, Error: {}",
                     failure.requestId(), failure.errorMessage());
             throw new RuntimeException("Publish failed: " + failure.errorMessage());
         }
-        
+
         throw new IllegalStateException("Unknown publish result type: " + publishResult.getClass());
     }
-    
+
     private CompletableFuture<String> handlePublishError(Exception e, NatsPublishRequest request) {
         log.error("Failed to publish NATS message", e);
-        
+
         CompletableFuture<String> errorFuture = new CompletableFuture<>();
         errorFuture.completeExceptionally(new NatsClientException(
-            "Failed to publish message: " + e.getMessage(),
-            e,
-            null,
-            request.getSubject(),
-            NatsClientException.ErrorType.UNKNOWN_ERROR
-        ));
-        
+                "Failed to publish message: " + e.getMessage(),
+                e,
+                null,
+                request.getSubject(),
+                NatsClientException.ErrorType.UNKNOWN_ERROR));
+
         return errorFuture;
     }
 
     public NatsRequestStatus getRequestStatus(String requestId) {
         Optional<NatsRequestLog> requestLogOpt = requestLogRepository.findByRequestId(requestId);
-        
+
         if (requestLogOpt.isEmpty()) {
             throw new NatsClientException(
-                "Request not found",
-                requestId,
-                null,
-                NatsClientException.ErrorType.VALIDATION_ERROR
-            );
+                    "Request not found",
+                    requestId,
+                    null,
+                    NatsClientException.ErrorType.VALIDATION_ERROR);
         }
 
         NatsRequestLog requestLog = requestLogOpt.get();
-        
+
         NatsRequestStatus status = new NatsRequestStatus();
         status.setRequestId(requestLog.getRequestId());
         status.setSubject(requestLog.getSubject());
@@ -100,14 +97,13 @@ public class NatsOrchestrationService {
         status.setResponseTimestamp(requestLog.getResponseTimestamp());
         status.setRetryCount(requestLog.getRetryCount());
         status.setErrorMessage(requestLog.getErrorMessage());
-        
+
         return status;
     }
 
-
     public List<NatsRequestStatus> getRequestsByStatus(NatsRequestLog.RequestStatus status) {
         List<NatsRequestLog> requests = requestLogRepository.findByStatus(status);
-        
+
         return requests.stream()
                 .map(log -> {
                     NatsRequestStatus requestStatus = new NatsRequestStatus();
@@ -125,57 +121,51 @@ public class NatsOrchestrationService {
 
     public NatsStatistics getStatistics() {
         NatsStatistics stats = new NatsStatistics();
-        
+
         stats.setPendingRequests(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.PENDING));
         stats.setSuccessfulRequests(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.SUCCESS));
         stats.setFailedRequests(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.FAILED));
         stats.setTimeoutRequests(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.TIMEOUT));
         stats.setErrorRequests(requestLogRepository.countByStatus(NatsRequestLog.RequestStatus.ERROR));
-        
+
         stats.setTotalRequests(
-            stats.getPendingRequests() + 
-            stats.getSuccessfulRequests() + 
-            stats.getFailedRequests() + 
-            stats.getTimeoutRequests() + 
-            stats.getErrorRequests()
-        );
-        
+                stats.getPendingRequests() +
+                        stats.getSuccessfulRequests() +
+                        stats.getFailedRequests() +
+                        stats.getTimeoutRequests() +
+                        stats.getErrorRequests());
+
         if (stats.getTotalRequests() > 0) {
             stats.setSuccessRate(
-                (double) stats.getSuccessfulRequests() / stats.getTotalRequests() * 100
-            );
+                    (double) stats.getSuccessfulRequests() / stats.getTotalRequests() * 100);
         }
-        
+
         return stats;
     }
-
 
     private void validatePublishRequest(NatsPublishRequest request) {
         if (request == null) {
             throw new NatsClientException(
-                "Publish request cannot be null",
-                null,
-                null,
-                NatsClientException.ErrorType.VALIDATION_ERROR
-            );
+                    "Publish request cannot be null",
+                    null,
+                    null,
+                    NatsClientException.ErrorType.VALIDATION_ERROR);
         }
-        
+
         if (request.getSubject() == null || request.getSubject().trim().isEmpty()) {
             throw new NatsClientException(
-                "Subject cannot be null or empty",
-                null,
-                request.getSubject(),
-                NatsClientException.ErrorType.VALIDATION_ERROR
-            );
+                    "Subject cannot be null or empty",
+                    null,
+                    request.getSubject(),
+                    NatsClientException.ErrorType.VALIDATION_ERROR);
         }
-        
+
         if (request.getPayload() == null) {
             throw new NatsClientException(
-                "Payload cannot be null",
-                null,
-                request.getSubject(),
-                NatsClientException.ErrorType.VALIDATION_ERROR
-            );
+                    "Payload cannot be null",
+                    null,
+                    request.getSubject(),
+                    NatsClientException.ErrorType.VALIDATION_ERROR);
         }
     }
 
@@ -183,15 +173,15 @@ public class NatsOrchestrationService {
         return "REQ-" + UUID.randomUUID().toString();
     }
 
-
     @Data
     public static class NatsPublishRequest {
         private String subject;
         private Object payload;
         private String responseSubject;
         private String responseIdField;
+        private String webhookUrl;
     }
-    
+
     @Data
     public static class ListenerStartRequest {
         private String subject;
@@ -219,5 +209,5 @@ public class NatsOrchestrationService {
         private long errorRequests;
         private double successRate;
     }
-    
+
 }
